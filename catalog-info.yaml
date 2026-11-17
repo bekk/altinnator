@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: altinnator
+  title: Altinnator
+  tags:
+    - public
+spec:
+  type: ops
+  owner: group:default/tilgangsstyring
+  lifecycle: production
+  system: system:default/skip
+  dependsOn:
+    - component:default/skip-apps

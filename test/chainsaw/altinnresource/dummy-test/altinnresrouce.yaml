@@ -1,0 +1,9 @@
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: AltinnResource
+metadata:
+  name: test-altinnresource
+spec:
+  requiredConfigMapData:
+    required_key: required_value
+  optionalConfigMapData:
+    optional_key: optional_value

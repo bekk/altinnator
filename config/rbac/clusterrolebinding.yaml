@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: altinnator
+  name: altinnator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: altinnator
+subjects:
+  - kind: ServiceAccount
+    name: altinnator
+    namespace: altinnator-system

@@ -1,0 +1,78 @@
+name: Build and scan Altinnator
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build container image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get sanitized branch name
+        id: branch
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          echo "name=${BRANCH//\//-}" >> $GITHUB_OUTPUT
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag with branch name
+            type=raw,value=${{ steps.branch.outputs.name }}
+            # Tag with the git SHA
+            type=sha,format=long
+
+      - name: Build and push Docker image
+        id: build-docker
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: ${{ !github.event.pull_request.draft }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Notice of image digest
+        run: echo "${{ steps.build-docker.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+    outputs:
+      image_digest: ${{ steps.build-docker.outputs.digest }}
+
+  pharos-scan:
+    if: (!github.event.pull_request.draft)
+    name: Run Pharos Security Scan
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Run Pharos
+        uses: kartverket/pharos@aee5b200a4bb042954127dd1446408d2841fcc29 # v0.7.1
+        with:
+          image_url: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{needs.build.outputs.image_digest}}"
+          tfsec: false
