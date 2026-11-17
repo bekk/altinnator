@@ -2,8 +2,8 @@
 idiomatic_version_file_enable_tools = ["go"]
 
 [hooks]
-# Stable symlink to the mise-installed Go SDK, so the IDE can use it as GOROOT across Go upgrades.
-postinstall = 'ln -sfn "$(mise where go)" .goroot'
+# Links the mise-installed Go SDK as the IDE's GOROOT (see scripts/setup-ide.sh).
+postinstall = './scripts/setup-ide.sh'
 
 [env]
 KUBERNETES_VERSION = "1.35.1"
@@ -33,9 +33,8 @@ setup-envtest = "0.25.2"
 [tasks."dev:run"]
 description = "Run altinnator from your host."
 run = [
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:not-deployed" },
-  { task = "crds:install" },
   '''
   # Not sourced as shell: values are taken literally, as kustomize does for the cluster.
   while IFS= read -r line || [ -n "$line" ]; do
@@ -44,14 +43,6 @@ run = [
   done < config/manager/base/.env
   go run ./cmd/main.go
   ''',
-]
-
-[tasks."dev:setup"]
-description = "Check local cluster, generate code and install CRDs (used by the IDE 'Setup' run config)."
-run = [
-  { task = "check:local" },
-  { task = "check:not-deployed" },
-  { task = "crds:install" },
 ]
 
 [tasks.generate]
@@ -123,10 +114,8 @@ run = '''
 [tasks.deploy]
 description = "Deploy altinnator and all required resources to the kind cluster."
 run = [
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:not-running" },
-  { task = "cluster:namespace" },
-  { task = "crds:install" },
   { task = "docker:build" },
   '''
   img="${IMG:-altinnator:latest}"
@@ -204,6 +193,7 @@ description = "Set up local development environment."
 run = [
   { task = "cluster:create" },
   { task = "cluster:namespace" },
+  { task = "check:local" },
   { task = "crds:install" },
 ]
 
@@ -308,8 +298,7 @@ run = [
 [tasks."chainsaw:test-all"]
 description = "Run all chainsaw tests in parallel."
 run = [
-  { task = "crds:install" },
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:running-or-deployed" },
   "./scripts/chainsaw-test-all.sh",
 ]
@@ -318,8 +307,7 @@ run = [
 description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/altinnresource/<test>'."
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
-  { task = "crds:install" },
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:running-or-deployed" },
   './scripts/chainsaw-test-single.sh -d "$usage_dir"',
 ]

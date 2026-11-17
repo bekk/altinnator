@@ -1,12 +1,14 @@
 # Contributing guides
 ## Getting started
 
-Install [mise](https://mise.jdx.dev/getting-started.html) and [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-(recommended for running the local Kind cluster), then install the repository's pinned development tools:
+The easiest way to get started is to install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+(recommended for running the local Kind cluster) and press play on the **Altinnator** run configuration in your JetBrains
+IDE. That is all it takes: it offers to install [mise](https://mise.jdx.dev/getting-started.html) if you don't have it,
+installs the pinned development tools, creates the local Kind cluster and starts the controller.
 
-```bash
-mise install
-```
+If you prefer to run from a terminal, run `./dev` in the project root. It does the same as the run configuration and
+works without mise installed. `./dev <task>` runs any other mise task, for example `./dev deploy`. If you already have
+mise, you can also run its tasks directly, such as `mise run dev:run`, and install the tools yourself with `mise install`.
 
 The Go version is read from `go.mod`; `mise.toml` pins the other tools. Besides the tools the tasks need (`kubectl`, `kind`,
 `kustomize`, `controller-gen`, `chainsaw`, `golangci-lint` and `setup-envtest`), `mise install` also sets up helpful
@@ -16,8 +18,15 @@ that cluster. You can override the cluster name with `KIND_CLUSTER_NAME` and the
 
 ### Use the mise-installed Go in your JetBrains IDE
 
-`mise install` also creates a gitignored `.goroot` symlink in the project root, pointing to the mise-installed Go SDK.
-To make GoLand/IntelliJ use the same Go version as the project, do the following once:
+`mise install` (also run by `./dev` and the **Altinnator** run configuration) creates a gitignored `.goroot` symlink in the project root, pointing to the
+mise-installed Go SDK, and registers it as the project's GOROOT in `.idea/workspace.xml`. For this to take effect, run it
+before opening the project in the IDE, or restart the IDE afterwards, because a running IDE overwrites that file.
+
+On a fresh clone you can simply press play on the **Altinnator** run configuration: its **Setup** step installs mise (after
+asking), the pinned tools and the GOROOT link. Since the IDE is already open at that point, the first run may fail with a
+missing Go SDK. Restart the IDE and press play again, and it will use the mise-installed Go.
+
+If the IDE still doesn't use it, set it manually once:
 
 1. In the IDE, go to **Settings → Go → GOROOT → Add SDK → Local…** and select the `.goroot` folder in the project root.
 2. Select that SDK as the project's GOROOT.
@@ -28,38 +37,37 @@ After a Go version bump, run `mise install` again; the symlink is refreshed and 
 
 ### Run on your host machine
 
-Create the local cluster and install the Altinnator CRDs:
-
-```bash
-mise run cluster:local
-```
-
-Start the controller from a JetBrains IDE with the **Altinnator** run configuration. It automatically runs the 
-**Setup** configuration first, which checks the local context and installs the generated CRDs, and loads environment 
-variables from `config/manager/base/.env`. Stop it with the IDE's stop button.
+Start the controller from a JetBrains IDE with the **Altinnator** run configuration. It automatically runs the
+**Setup** configuration first, which creates the local Kind cluster if it doesn't exist, checks the local context
+and installs the generated CRDs, and loads environment variables from `config/manager/base/.env`. Stop it with the IDE's stop button.
 
 If you want to start the controller from a terminal on your host, run:
 
 ```bash
-mise run dev:run
+./dev
 ```
-
-This command generates the required code and CRDs before starting the controller. It refuses to run if Altinnator is
-already deployed in the cluster or if your current Kubernetes context is not the configured local Kind context. Stop
-the process with `Ctrl-C`.
 
 ### Run in the local cluster
 
 To build and deploy Altinnator into the local Kind cluster instead of running it on your host:
 
 ```bash
-mise run cluster:local
 mise run deploy
 ```
 
 The deploy task builds the image, loads it into Kind, applies the controller resources, and waits for the deployment
-to become ready. To remove the deployment, run `mise run undeploy`. To delete the local cluster and its contents, run
-`mise run cluster:clean`.
+to become ready. To remove the deployment, run `mise run undeploy`. 
+
+### Clean up the local cluster
+
+The local Kind cluster is created automatically and stays around between runs. When you no longer need it, or want to
+start from scratch, delete the cluster and everything in it with:
+
+```bash
+mise run cluster:clean
+```
+
+The next `mise run dev:run`, `mise run deploy` or `mise run chainsaw:test-all` creates a fresh cluster.
 
 ## Running tests
 
@@ -72,9 +80,9 @@ mise run test
 
 The first run downloads the envtest binaries for the Kubernetes version used by this project.
 
-End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They need the local Kind cluster and the
-controller running, either on your host (`mise run dev:run`) or deployed into the cluster (`mise run deploy`). Run
-the full suite with:
+End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They set up the local Kind cluster if needed, and need the
+controller running, either on your host (`mise run dev:run` or in IDE) or deployed into the cluster (`mise run deploy`). 
+Run the full suite with:
 
 ```bash
 mise run chainsaw:test-all
