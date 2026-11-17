@@ -8,7 +8,9 @@ Install [mise](https://mise.jdx.dev/getting-started.html) and [Docker Desktop](h
 mise install
 ```
 
-The Go version is read from `go.mod`; `mise.toml` pins the other tools. Local development and end-to-end testing use a
+The Go version is read from `go.mod`; `mise.toml` pins the other tools. Besides the tools the tasks need (`kubectl`, `kind`,
+`kustomize`, `controller-gen`, `chainsaw`, `golangci-lint` and `setup-envtest`), `mise install` also sets up helpful
+development tools like `kubectx` and `k9s`. Local development and end-to-end testing use a
 Kind cluster named `altinnator` with the Kubernetes context `kind-altinnator`. The commands below create and manage
 that cluster. You can override the cluster name with `KIND_CLUSTER_NAME` and the context with `KUBECONTEXT`.
 
