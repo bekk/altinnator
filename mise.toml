@@ -1,0 +1,326 @@
+[settings]
+idiomatic_version_file_enable_tools = ["go"]
+
+[hooks]
+# Stable symlink to the mise-installed Go SDK, so the IDE can use it as GOROOT across Go upgrades.
+postinstall = 'ln -sfn "$(mise where go)" .goroot'
+
+[env]
+KUBERNETES_VERSION = "1.35.1"
+KIND_CLUSTER_NAME = "{{ get_env(name='KIND_CLUSTER_NAME', default='altinnator') }}"
+KUBECONTEXT = "{{ get_env(name='KUBECONTEXT', default='kind-' ~ get_env(name='KIND_CLUSTER_NAME', default='altinnator')) }}"
+# Pinned by digest so local runs and the api-docs workflow render identically.
+CRDOC_IMAGE = "{{ get_env(name='CRDOC_IMAGE', default='ghcr.io/fybrik/crdoc@sha256:355ef777a45021ee864e613b2234b4f2c6193762e3e0de94a26b66d06cec81c3') }}"
+
+[tools]
+# Go itself is resolved from go.mod via idiomatic_version_file_enable_tools.
+kubectl = "1.35.1" # keep in sync with KUBERNETES_VERSION above
+kind = "0.31.0"
+kustomize = "5.8.1"
+golangci-lint = "2.15.0"
+# Keep the release branch in sync with sigs.k8s.io/controller-runtime in go.mod.
+setup-envtest = "0.25.2"
+"go:sigs.k8s.io/controller-tools/cmd/controller-gen" = "v0.21.0"
+# Temporary pin until Chainsaw publishes a release with Go 1.27 support.
+"go:github.com/kyverno/chainsaw" = "b7d4a4f5dd45e333add856a5ae9057fc5a57e93a"
+
+# ---------------------------------------------------------------------------
+# Development
+# ---------------------------------------------------------------------------
+
+[tasks."dev:run"]
+description = "Run altinnator from your host."
+run = [
+  { task = "check:local" },
+  { task = "check:not-deployed" },
+  { task = "generate" },
+  { task = "crds:install" },
+  '''
+  # Not sourced as shell: values are taken literally, as kustomize does for the cluster.
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    export "$line"
+  done < config/manager/base/.env
+  go run ./cmd/main.go
+  ''',
+]
+
+[tasks."dev:setup"]
+description = "Check local cluster, generate code and install CRDs (used by the IDE 'Setup' run config)."
+run = [
+  { task = "check:local" },
+  { task = "check:not-deployed" },
+  { task = "generate" },
+  { task = "crds:install" },
+]
+
+[tasks.generate]
+description = "Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations."
+run = '''
+controller-gen object rbac:roleName=altinnator crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases output:webhook:artifacts:config=config/webhook/bases
+'''
+
+# Renders api-docs.md from the generated CRDs. crdoc only reads the directory it
+# is pointed at, so the CRDs are staged in one and removed again afterwards.
+[tasks.apidocs]
+description = "Render api-docs.md from the generated CRDs (skipped if docker is missing)."
+run = '''
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker not found on PATH, skipping apidocs"
+  exit 0
+fi
+resources_dir=crdoc-resources
+mkdir -p "$resources_dir"
+trap 'rm -rf "$resources_dir"' EXIT
+cp config/crd/bases/altinnator.kartverket.no_*.yaml "$resources_dir/"
+docker run -u "$(id -u):$(id -g)" --rm -v "$PWD":/workdir "$CRDOC_IMAGE" \
+  --resources "/workdir/$resources_dir" \
+  --output /workdir/api-docs.md \
+  --template /workdir/.github/crdoc.tmpl
+'''
+
+[tasks.fmt]
+description = "Run go fmt against code."
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "Run go vet against code."
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint linter."
+run = "golangci-lint run --config .golangci.yml"
+
+[tasks."lint:fix"]
+description = "Run golangci-lint linter and perform fixes."
+run = "golangci-lint run --fix --config .golangci.yml"
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+
+[tasks.build]
+description = "Build manager binary."
+run = [
+  { task = "generate" },
+  { task = "fmt" },
+  { task = "vet" },
+  "go build -o bin/altinnator cmd/main.go",
+]
+
+# To build for other platforms use the --platform flag (i.e. docker build --platform linux/arm64).
+# This requires docker buildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+[tasks."docker:build"]
+description = "Build docker image with the manager (IMG and CONTAINER_TOOL can be overridden via env)."
+run = '''
+"${CONTAINER_TOOL:-docker}" build -t "${IMG:-altinnator:latest}" .
+'''
+
+# ---------------------------------------------------------------------------
+# Deployment
+# ---------------------------------------------------------------------------
+
+[tasks.deploy]
+description = "Deploy altinnator and all required resources to the kind cluster."
+run = [
+  { task = "check:local" },
+  { task = "check:not-running" },
+  { task = "cluster:namespace" },
+  { task = "generate" },
+  { task = "crds:install" },
+  { task = "docker:build" },
+  '''
+  img="${IMG:-altinnator:latest}"
+  (cd config/manager && kustomize edit set image controller="$img")
+  kind load docker-image "$img" --name "$KIND_CLUSTER_NAME"
+  out="$(kustomize build config/manager | kubectl apply --context "$KUBECONTEXT" -f -)"
+  echo "$out"
+  # The image tag is constant (imagePullPolicy: Never), so an unchanged Deployment won't pick up a rebuilt image.
+  # Created/configured Deployments already roll out on their own.
+  if echo "$out" | grep -q '^deployment.apps/altinnator unchanged'; then
+    kubectl rollout restart deployment/altinnator -n altinnator-system --context "$KUBECONTEXT"
+  fi
+  kubectl rollout status deployment/altinnator -n altinnator-system --timeout=120s --context "$KUBECONTEXT" \
+    || { echo "❌  Error deploying altinnator."; exit 1; }
+  echo "✅  altinnator installed in namespace 'altinnator-system'!"
+  ''',
+]
+
+[tasks.undeploy]
+description = "Undeploy altinnator and its resources from the kind cluster."
+usage = 'flag "--ignore-not-found" help="Ignore resource not found errors during deletion"'
+run = '''
+out="$(kustomize build config/manager 2>/dev/null || true)"
+if [ -n "$out" ]; then
+  echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+else
+  echo "No manager resources to delete; skipping."
+fi
+'''
+
+[tasks."crds:install"]
+description = "Install CRDs and ClusterRoles into the local kind cluster."
+run = [
+  { task = "generate" },
+  '''
+  out="$(kustomize build config/crd 2>/dev/null || true)"
+  if [ -n "$out" ]; then echo "$out" | kubectl apply --context "$KUBECONTEXT" -f -; else echo "No CRDs to install; skipping."; fi
+  out="$(kustomize build config/rbac 2>/dev/null || true)"
+  if [ -n "$out" ]; then echo "$out" | kubectl apply --context "$KUBECONTEXT" -f -; else echo "No ClusterRoles to install; skipping."; fi
+  ''',
+]
+
+[tasks."crds:uninstall"]
+description = "Uninstall CRDs and ClusterRoles from the local kind cluster."
+usage = 'flag "--ignore-not-found" help="Ignore resource not found errors during deletion"'
+run = [
+  { task = "generate" },
+  '''
+  out="$(kustomize build config/crd 2>/dev/null || true)"
+  if [ -n "$out" ]; then echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -; else echo "No CRDs to delete; skipping."; fi
+  out="$(kustomize build config/rbac 2>/dev/null || true)"
+  if [ -n "$out" ]; then echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -; else echo "No ClusterRoles to delete; skipping."; fi
+  ''',
+]
+
+# ---------------------------------------------------------------------------
+# Cluster
+# ---------------------------------------------------------------------------
+
+[tasks."cluster:create"]
+description = "Create Kind cluster with kube context kind-altinnator."
+run = '''
+echo "Create kind cluster..." >&2
+kind create cluster --image "kindest/node:v${KUBERNETES_VERSION}" --name "$KIND_CLUSTER_NAME"
+'''
+
+[tasks."cluster:namespace"]
+description = "Create altinnator-system namespace in the cluster."
+run = "./scripts/create-altinnator-namespace.sh"
+
+[tasks."cluster:local"]
+description = "Set up local development environment."
+run = [
+  { task = "cluster:create" },
+  { task = "cluster:namespace" },
+  { task = "generate" },
+  { task = "crds:install" },
+]
+
+[tasks."cluster:clean"]
+description = "Clean up local environment by deleting the kind cluster."
+run = 'kind delete cluster --name "$KIND_CLUSTER_NAME"'
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+[tasks."check:running"]
+description = "Check if altinnator is running on your host machine (IDE or 'mise run dev:run')."
+run = '''
+echo "Checking if altinnator is running..."
+lsof -i :8081 >/dev/null || { echo "❌ altinnator is not running. Please start it first either in your IDE or with 'mise run dev:run'."; exit 1; }
+echo "✅ altinnator is running."
+'''
+
+[tasks."check:not-running"]
+description = "Check that altinnator is NOT running on your host machine."
+run = '''
+echo "Checking if altinnator is not running..."
+if lsof -i :8081 >/dev/null; then
+  echo "❌ altinnator is running on your host. Please stop it first."
+  exit 1
+fi
+echo "✅ altinnator is not running on your host."
+'''
+
+[tasks."check:local"]
+description = "Ensure local environment is set up and the kind cluster is the current kube context."
+run = "./scripts/ensure-local-setup.sh"
+
+[tasks."check:not-deployed"]
+description = "Ensure altinnator is NOT deployed in the kind cluster."
+run = '''
+if kubectl -n altinnator-system get deployment altinnator >/dev/null 2>&1; then
+  echo "❌ altinnator IS deployed to the cluster"
+  exit 1
+else
+  echo "✅ altinnator IS NOT deployed to the cluster"
+fi
+'''
+
+[tasks."check:deployed"]
+description = "Ensure altinnator is deployed in the kind cluster."
+run = [
+  { task = "check:local" },
+  { task = "check:not-running" },
+  '''
+  ./scripts/ensure-altinnator-deployed.sh \
+    || { echo "❌ altinnator resources are not deployed correctly to the cluster. To fix it, run 'mise run deploy'."; exit 1; }
+  ''',
+]
+
+[tasks."check:running-or-deployed"]
+description = "Ensure altinnator is running on host OR deployed in cluster, but not both."
+run = '''
+mise run -q check:running >/dev/null 2>&1 && running=1 || running=0
+mise run -q check:deployed >/dev/null 2>&1 && deployed=1 || deployed=0
+if [ "$running" = "1" ] && [ "$deployed" = "1" ]; then
+  echo "❌ altinnator is both running on the host AND deployed in the cluster. Stop one before continuing."
+  exit 1
+fi
+if [ "$running" = "0" ] && [ "$deployed" = "0" ]; then
+  echo "❌ altinnator is neither running on the host nor deployed in the cluster."
+  echo "   Start it in your IDE / with 'mise run dev:run', or deploy it with 'mise run deploy'."
+  exit 1
+fi
+if [ "$running" = "1" ]; then echo "✅ altinnator is running on the host."; fi
+if [ "$deployed" = "1" ]; then echo "✅ altinnator is deployed an running in the local cluster."; fi
+'''
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+
+# Kubernetes version for the envtest binaries, derived from k8s.io/api in go.mod (i.e. v0.37.2 -> 1.37).
+[tasks."test:envtest"]
+description = "Download the binaries required for envtest into ./bin and print their path."
+run = '''
+{% raw %}
+v="$(go list -m -f '{{if .Replace}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}' k8s.io/api 2>/dev/null)"
+{% endraw %}
+[ -n "$v" ] || { echo "Set the envtest Kubernetes version manually (k8s.io/api replace has no tag)" >&2; exit 1; }
+k8s_version="$(printf '%s\n' "$v" | sed -E 's/^v?[0-9]+\.([0-9]+).*/1.\1/')"
+echo "Setting up envtest binaries for Kubernetes version $k8s_version..." >&2
+setup-envtest use "$k8s_version" --bin-dir bin -p path
+'''
+
+[tasks.test]
+description = "Run go tests."
+run = [
+  { task = "generate" },
+  { task = "fmt" },
+  { task = "vet" },
+  '''
+  KUBEBUILDER_ASSETS="$(mise run -q test:envtest)" go test $(go list ./...) -coverprofile cover.out
+  ''',
+]
+
+[tasks."chainsaw:test-all"]
+description = "Run all chainsaw tests in parallel."
+run = [
+  { task = "crds:install" },
+  { task = "check:local" },
+  { task = "check:running-or-deployed" },
+  "./scripts/chainsaw-test-all.sh",
+]
+
+[tasks."chainsaw:test-single"]
+description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/altinnresource/<test>'."
+usage = 'arg "<dir>" help="Chainsaw test directory"'
+run = [
+  { task = "crds:install" },
+  { task = "check:local" },
+  { task = "check:running-or-deployed" },
+  './scripts/chainsaw-test-single.sh -d "$usage_dir"',
+]

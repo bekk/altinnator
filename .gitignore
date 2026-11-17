@@ -14,20 +14,29 @@
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
-!coverage.go
 *.coverprofile
 profile.cov
+
+# Added by goreleaser init:
+dist/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# macOS system files
+.DS_Store
+
+# Debug binary
+cmd/__debug_bin*
+
 # Go workspace file
 go.work
 go.work.sum
+cover.out
 
 # env file
-.env
+bin/
+.idea/
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Symlink to the mise-installed Go SDK (created by mise postinstall hook)
+.goroot

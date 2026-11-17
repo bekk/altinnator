@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- base/deployment.yaml
+- base/leader-election-role.yaml
+- base/leader-election-rolebinding.yaml
+- base/pdb.yaml
+- base/serviceaccount.yaml
+
+images:
+- name: controller
+  newName: altinnator
+  newTag: latest
+
+configMapGenerator:
+- envs:
+  - base/.env
+  name: altinnator-env
+  namespace: altinnator-system

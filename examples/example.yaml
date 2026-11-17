@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+---
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: AltinnResource
+metadata:
+  name: test-altinnresource
+  namespace: test
+spec:
+  requiredConfigMapData:
+    required_key: required_value
+  optionalConfigMapData:
+    optional_key: optional_value
