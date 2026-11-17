@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Starts the controller on your host, installing mise and the project's tools first if needed.
+# Works without mise installed. Pass a task name to run it instead, e.g. ./dev deploy.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+exec ./scripts/bootstrap.sh run "${@:-dev:run}"

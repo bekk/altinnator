@@ -17,9 +17,8 @@ jobs:
       - name: Setup mise
         uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
 
-      - name: Setup local cluster, deploy Altinnator and run chainsaw tests
+      - name: Deploy Altinnator and run chainsaw tests
         run: |
-          mise run cluster:local
           mise run deploy
           mise run chainsaw:test-all
 

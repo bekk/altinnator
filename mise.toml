@@ -2,8 +2,8 @@
 idiomatic_version_file_enable_tools = ["go"]
 
 [hooks]
-# Stable symlink to the mise-installed Go SDK, so the IDE can use it as GOROOT across Go upgrades.
-postinstall = 'ln -sfn "$(mise where go)" .goroot'
+# Links the mise-installed Go SDK as the IDE's GOROOT (see scripts/setup-ide.sh).
+postinstall = './scripts/setup-ide.sh'
 
 [env]
 KUBERNETES_VERSION = "1.35.1"
@@ -18,6 +18,8 @@ kubectl = "1.35.1" # keep in sync with KUBERNETES_VERSION above
 kind = "0.31.0"
 kustomize = "5.8.1"
 golangci-lint = "2.15.0"
+k9s = "0.51.0"
+kubectx = "0.11.0"
 # Keep the release branch in sync with sigs.k8s.io/controller-runtime in go.mod.
 setup-envtest = "0.25.2"
 "go:sigs.k8s.io/controller-tools/cmd/controller-gen" = "v0.21.0"
@@ -31,10 +33,8 @@ setup-envtest = "0.25.2"
 [tasks."dev:run"]
 description = "Run altinnator from your host."
 run = [
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:not-deployed" },
-  { task = "generate" },
-  { task = "crds:install" },
   '''
   # Not sourced as shell: values are taken literally, as kustomize does for the cluster.
   while IFS= read -r line || [ -n "$line" ]; do
@@ -43,15 +43,6 @@ run = [
   done < config/manager/base/.env
   go run ./cmd/main.go
   ''',
-]
-
-[tasks."dev:setup"]
-description = "Check local cluster, generate code and install CRDs (used by the IDE 'Setup' run config)."
-run = [
-  { task = "check:local" },
-  { task = "check:not-deployed" },
-  { task = "generate" },
-  { task = "crds:install" },
 ]
 
 [tasks.generate]
@@ -123,11 +114,8 @@ run = '''
 [tasks.deploy]
 description = "Deploy altinnator and all required resources to the kind cluster."
 run = [
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:not-running" },
-  { task = "cluster:namespace" },
-  { task = "generate" },
-  { task = "crds:install" },
   { task = "docker:build" },
   '''
   img="${IMG:-altinnator:latest}"
@@ -150,23 +138,21 @@ run = [
 description = "Undeploy altinnator and its resources from the kind cluster."
 usage = 'flag "--ignore-not-found" help="Ignore resource not found errors during deletion"'
 run = '''
-out="$(kustomize build config/manager 2>/dev/null || true)"
-if [ -n "$out" ]; then
-  echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
-else
-  echo "No manager resources to delete; skipping."
-fi
+manifests="$(kustomize build config/manager)"
+echo "$manifests" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
 '''
 
+# kustomize build runs outside the pipe on purpose: a failure (e.g. an invalid kustomization) aborts the task
+# instead of silently applying nothing. Same pattern in crds:uninstall and undeploy.
 [tasks."crds:install"]
 description = "Install CRDs and ClusterRoles into the local kind cluster."
 run = [
   { task = "generate" },
   '''
-  out="$(kustomize build config/crd 2>/dev/null || true)"
-  if [ -n "$out" ]; then echo "$out" | kubectl apply --context "$KUBECONTEXT" -f -; else echo "No CRDs to install; skipping."; fi
-  out="$(kustomize build config/rbac 2>/dev/null || true)"
-  if [ -n "$out" ]; then echo "$out" | kubectl apply --context "$KUBECONTEXT" -f -; else echo "No ClusterRoles to install; skipping."; fi
+  crds="$(kustomize build config/crd)"
+  echo "$crds" | kubectl apply --context "$KUBECONTEXT" -f -
+  rbac="$(kustomize build config/rbac)"
+  echo "$rbac" | kubectl apply --context "$KUBECONTEXT" -f -
   ''',
 ]
 
@@ -176,10 +162,10 @@ usage = 'flag "--ignore-not-found" help="Ignore resource not found errors during
 run = [
   { task = "generate" },
   '''
-  out="$(kustomize build config/crd 2>/dev/null || true)"
-  if [ -n "$out" ]; then echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -; else echo "No CRDs to delete; skipping."; fi
-  out="$(kustomize build config/rbac 2>/dev/null || true)"
-  if [ -n "$out" ]; then echo "$out" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -; else echo "No ClusterRoles to delete; skipping."; fi
+  crds="$(kustomize build config/crd)"
+  echo "$crds" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+  rbac="$(kustomize build config/rbac)"
+  echo "$rbac" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
   ''',
 ]
 
@@ -190,8 +176,12 @@ run = [
 [tasks."cluster:create"]
 description = "Create Kind cluster with kube context kind-altinnator."
 run = '''
-echo "Create kind cluster..." >&2
-kind create cluster --image "kindest/node:v${KUBERNETES_VERSION}" --name "$KIND_CLUSTER_NAME"
+if kind get clusters | grep -qx "$KIND_CLUSTER_NAME"; then
+  echo "✅ kind cluster '$KIND_CLUSTER_NAME' already exists, skipping creation." >&2
+else
+  echo "Create kind cluster..." >&2
+  kind create cluster --image "kindest/node:v${KUBERNETES_VERSION}" --name "$KIND_CLUSTER_NAME"
+fi
 '''
 
 [tasks."cluster:namespace"]
@@ -203,7 +193,7 @@ description = "Set up local development environment."
 run = [
   { task = "cluster:create" },
   { task = "cluster:namespace" },
-  { task = "generate" },
+  { task = "check:local" },
   { task = "crds:install" },
 ]
 
@@ -219,7 +209,7 @@ run = 'kind delete cluster --name "$KIND_CLUSTER_NAME"'
 description = "Check if altinnator is running on your host machine (IDE or 'mise run dev:run')."
 run = '''
 echo "Checking if altinnator is running..."
-lsof -i :8081 >/dev/null || { echo "❌ altinnator is not running. Please start it first either in your IDE or with 'mise run dev:run'."; exit 1; }
+lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null || { echo "❌ altinnator is not running. Please start it first either in your IDE or with 'mise run dev:run'."; exit 1; }
 echo "✅ altinnator is running."
 '''
 
@@ -227,7 +217,7 @@ echo "✅ altinnator is running."
 description = "Check that altinnator is NOT running on your host machine."
 run = '''
 echo "Checking if altinnator is not running..."
-if lsof -i :8081 >/dev/null; then
+if lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null; then
   echo "❌ altinnator is running on your host. Please stop it first."
   exit 1
 fi
@@ -253,7 +243,6 @@ fi
 description = "Ensure altinnator is deployed in the kind cluster."
 run = [
   { task = "check:local" },
-  { task = "check:not-running" },
   '''
   ./scripts/ensure-altinnator-deployed.sh \
     || { echo "❌ altinnator resources are not deployed correctly to the cluster. To fix it, run 'mise run deploy'."; exit 1; }
@@ -309,8 +298,7 @@ run = [
 [tasks."chainsaw:test-all"]
 description = "Run all chainsaw tests in parallel."
 run = [
-  { task = "crds:install" },
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:running-or-deployed" },
   "./scripts/chainsaw-test-all.sh",
 ]
@@ -319,8 +307,7 @@ run = [
 description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/altinnresource/<test>'."
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
-  { task = "crds:install" },
-  { task = "check:local" },
+  { task = "cluster:local" },
   { task = "check:running-or-deployed" },
   './scripts/chainsaw-test-single.sh -d "$usage_dir"',
 ]

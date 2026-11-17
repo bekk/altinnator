@@ -20,7 +20,11 @@ command -v "${KUBECTL_BIN}" >/dev/null 2>&1 || {
 ctx="$("${KUBECTL_BIN}" config current-context 2>/dev/null || true)"
 if [[ "${ctx}" != "${KUBECONTEXT}" ]]; then
   echo "❌  Current kubecontext is '${ctx}' (expected '${KUBECONTEXT}')." >&2
-  echo "    Switch with: kubectx ${KUBECONTEXT}" >&2
+  if "${KIND_BIN}" get clusters 2>/dev/null | grep -qx "${KIND_CLUSTER_NAME}"; then
+    echo "    The kind cluster exists. Switch with: kubectx ${KUBECONTEXT}" >&2
+  else
+    echo "    The kind cluster '${KIND_CLUSTER_NAME}' does not exist. Set it up with: mise run cluster:local" >&2
+  fi
   exit 1
 fi
 
