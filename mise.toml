@@ -115,9 +115,12 @@ run = '''
 description = "Deploy altinnator and all required resources to the kind cluster."
 run = [
   { task = "cluster:local" },
-  { task = "check:not-running" },
   { task = "docker:build" },
   '''
+  if lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null; then
+    echo "❌  altinnator is running on your host. Please stop it first."
+    exit 1
+  fi
   img="${IMG:-altinnator:latest}"
   (cd config/manager && kustomize edit set image controller="$img")
   kind load docker-image "$img" --name "$KIND_CLUSTER_NAME"
@@ -205,25 +208,6 @@ run = 'kind delete cluster --name "$KIND_CLUSTER_NAME"'
 # Checks
 # ---------------------------------------------------------------------------
 
-[tasks."check:running"]
-description = "Check if altinnator is running on your host machine (IDE or 'mise run dev:run')."
-run = '''
-echo "Checking if altinnator is running..."
-lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null || { echo "❌ altinnator is not running. Please start it first either in your IDE or with 'mise run dev:run'."; exit 1; }
-echo "✅ altinnator is running."
-'''
-
-[tasks."check:not-running"]
-description = "Check that altinnator is NOT running on your host machine."
-run = '''
-echo "Checking if altinnator is not running..."
-if lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null; then
-  echo "❌ altinnator is running on your host. Please stop it first."
-  exit 1
-fi
-echo "✅ altinnator is not running on your host."
-'''
-
 [tasks."check:local"]
 description = "Ensure local environment is set up and the kind cluster is the current kube context."
 run = "./scripts/ensure-local-setup.sh"
@@ -239,8 +223,8 @@ else
 fi
 '''
 
-[tasks."check:deployed"]
-description = "Ensure altinnator is deployed in the kind cluster."
+[tasks."check:deployed-healthy"]
+description = "Ensure altinnator is deployed and healthy in the kind cluster (not just the opposite of check:not-deployed)."
 run = [
   { task = "check:local" },
   '''
@@ -252,8 +236,8 @@ run = [
 [tasks."check:running-or-deployed"]
 description = "Ensure altinnator is running on host OR deployed in cluster, but not both."
 run = '''
-mise run -q check:running >/dev/null 2>&1 && running=1 || running=0
-mise run -q check:deployed >/dev/null 2>&1 && deployed=1 || deployed=0
+lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null 2>&1 && running=1 || running=0
+mise run -q check:deployed-healthy >/dev/null 2>&1 && deployed=1 || deployed=0
 if [ "$running" = "1" ] && [ "$deployed" = "1" ]; then
   echo "❌ altinnator is both running on the host AND deployed in the cluster. Stop one before continuing."
   exit 1
