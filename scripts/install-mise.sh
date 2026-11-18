@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Makes sure mise is available (offering to install it with the official installer) and the project's pinned tools are installed
-# (the postinstall hook in mise.toml also links mise's Go into the IDE), then runs mise with the given arguments.
+# Makes sure mise is available (offering to install it with the official installer) and trusts this project's mise.toml.
+# The pinned tools are installed by mise itself the first time a task runs. If arguments are given, runs mise with them.
 #
-# Usage: scripts/bootstrap.sh run <task> [args...]
+# Usage: scripts/install-mise.sh [mise args...], e.g. scripts/install-mise.sh run dev:run
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -19,7 +19,9 @@ find_mise() {
   return 1
 }
 
-if ! mise_bin="$(find_mise)"; then
+if mise_bin="$(find_mise)"; then
+  echo "✅  mise is already installed: $("$mise_bin" version) ($mise_bin)"
+else
   echo "mise is not installed. This project uses it to provide Go and all development tools."
   echo "See https://mise.jdx.dev/getting-started.html"
 
@@ -48,7 +50,5 @@ fi
 
 # Running this script inside the repository is taken as trusting its mise.toml.
 "$mise_bin" trust --quiet
-echo "Installing the project's tools. The first time this can take a few minutes, as some tools are compiled from source."
-"$mise_bin" install
 
-exec "$mise_bin" "$@"
+[ $# -eq 0 ] || exec "$mise_bin" "$@"

@@ -1,62 +1,55 @@
 # Contributing guides
+## Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/): install it and keep it running. It hosts the local Kind cluster.
+- [mise](https://mise.jdx.dev/getting-started.html): manages the pinned development tools (Go, `kubectl`, `kind`, etc.).
+  You don't need to install it up front. The **Altinnator** run configuration and the install script below prompt you to install it if it's missing.
+
 ## Getting started
 
-The easiest way to get started is to install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-(recommended for running the local Kind cluster) and press play on the **Altinnator** run configuration in your JetBrains
-IDE. That is all it takes: it offers to install [mise](https://mise.jdx.dev/getting-started.html) if you don't have it,
-installs the pinned development tools, creates the local Kind cluster and starts the controller.
+- JetBrains IDE: press play on the **Altinnator** run configuration. It installs the pinned tools, creates the Kind cluster and starts the controller.
+- Terminal: install mise once, then run tasks with `mise run <task>`:
 
-If you prefer to run from a terminal, run `./dev` in the project root. It does the same as the run configuration and
-works without mise installed. `./dev <task>` runs any other mise task, for example `./dev deploy`. If you already have
-mise, you can also run its tasks directly, such as `mise run dev:run`, and install the tools yourself with `mise install`.
+```bash
+./scripts/install-mise.sh   # prompts to install mise if missing
+mise run dev:run            # run the controller locally, with the pinned tools and Kind cluster
+```
 
-The Go version is read from `go.mod`; `mise.toml` pins the other tools. Besides the tools the tasks need (`kubectl`, `kind`,
-`kustomize`, `controller-gen`, `chainsaw`, `golangci-lint` and `setup-envtest`), `mise install` also sets up helpful
-development tools like `kubectx` and `k9s`. Local development and end-to-end testing use a
-Kind cluster named `altinnator` with the Kubernetes context `kind-altinnator`. The commands below create and manage
-that cluster. You can override the cluster name with `KIND_CLUSTER_NAME` and the context with `KUBECONTEXT`.
+- If mise is already installed, just run `mise run dev:run`.
+- Go version comes from `go.mod`; `mise.toml` pins the other tools.
+- Local cluster: Kind cluster `altinnator`, context `kind-altinnator`. Override with `KIND_CLUSTER_NAME` and `KUBECONTEXT`.
 
-### Use the mise-installed Go in your JetBrains IDE
-
-`mise install` (also run by `./dev` and the **Altinnator** run configuration) creates a gitignored `.goroot` symlink in the project root, pointing to the
-mise-installed Go SDK, and registers it as the project's GOROOT in `.idea/workspace.xml`. For this to take effect, run it
-before opening the project in the IDE, or restart the IDE afterwards, because a running IDE overwrites that file.
-
-On a fresh clone you can simply press play on the **Altinnator** run configuration: its **Setup** step installs mise (after
-asking), the pinned tools and the GOROOT link. Since the IDE is already open at that point, the first run may fail with a
-missing Go SDK. Restart the IDE and press play again, and it will use the mise-installed Go.
-
-If the IDE still doesn't use it, set it manually once:
-
-1. In the IDE, go to **Settings → Go → GOROOT → Add SDK → Local…** and select the `.goroot` folder in the project root.
-2. Select that SDK as the project's GOROOT.
-
-After a Go version bump, run `mise install` again; the symlink is refreshed and the IDE follows it (re-index if prompted).
+> [!IMPORTANT]
+> **Set the mise-installed Go as GOROOT in JetBrains.** `mise install` registers it in `.idea/workspace.xml`, but the IDE
+> only reads it when the project opens. If the project was already open (e.g. first press of play), click **Set up Go** in the
+> *Go SDK is not specified for this project* banner (or **Settings → Go → GOROOT**) and select
+> `~/.local/share/mise/installs/go/<version>`.
+> After a Go version bump, run `mise install` again to update it.
 
 ## Run Altinnator locally
 
 ### Run on your host machine
 
-Start the controller from a JetBrains IDE with the **Altinnator** run configuration. It automatically runs the
-**Setup** configuration first, which creates the local Kind cluster if it doesn't exist, checks the local context
-and installs the generated CRDs, and loads environment variables from `config/manager/base/.env`. Stop it with the IDE's stop button.
+- IDE: run the **Altinnator** configuration (runs **Setup** first, loads `config/manager/base/.env`). Stop with the stop button.
 
-If you want to start the controller from a terminal on your host, run:
+> [!IMPORTANT]
+> The JetBrains [EnvFile](https://plugins.jetbrains.com/plugin/7861-envfile) plugin must be installed, otherwise the
+> environment variables from `config/manager/base/.env` are not loaded when running in the IDE.
+
+- Terminal (after installing mise, see above):
 
 ```bash
-./dev
+mise run dev:run
 ```
 
 ### Run in the local cluster
 
-To build and deploy Altinnator into the local Kind cluster instead of running it on your host:
+- Builds the image, loads it into Kind, applies resources and waits for readiness:
 
 ```bash
 mise run deploy
+mise run undeploy   # remove the deployment
 ```
-
-The deploy task builds the image, loads it into Kind, applies the controller resources, and waits for the deployment
-to become ready. To remove the deployment, run `mise run undeploy`. 
 
 ### Clean up the local cluster
 
@@ -71,27 +64,36 @@ The next `mise run dev:run`, `mise run deploy` or `mise run chainsaw:test-all` c
 
 ## Running tests
 
-Unit and integration tests use Go's test runner with [envtest](https://book.kubebuilder.io/reference/envtest) to run
-a local Kubernetes API server. Run them with:
+- Unit/integration tests use [envtest](https://github.com/kubernetes-sigs/controller-runtime/blob/main/tools/setup-envtest/README.md) 
+(first run downloads binaries):
 
 ```bash
 mise run test
 ```
 
-The first run downloads the envtest binaries for the Kubernetes version used by this project.
+- The behavioral tests use [Ginkgo](https://onsi.github.io/ginkgo/) and [Gomega](https://onsi.github.io/gomega/).
+  For the best experience writing and running them in a JetBrains IDE, install the
+  [Ginkgo plugin](https://plugins.jetbrains.com/plugin/17554-ginkgo). It requires:
+  - IntelliJ IDEA Ultimate or GoLand (it relies on the Go plugin).
+  - The Ginkgo CLI as test executor. Install it from the project root, which picks the version in `go.mod`:
+    `go install github.com/onsi/ginkgo/v2/ginkgo`. See the [Ginkgo documentation](https://onsi.github.io/ginkgo/#installing-ginkgo) for details.
 
-End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They set up the local Kind cluster if needed, and need the
-controller running, either on your host (`mise run dev:run` or in IDE) or deployed into the cluster (`mise run deploy`). 
-Run the full suite with:
+- End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They need the controller running
+  (`mise run dev:run`, IDE, or `mise run deploy`):
 
 ```bash
 mise run chainsaw:test-all
+mise run chainsaw:test-single test/chainsaw/altinnresource/dummy-test
 ```
 
-Run one test directory with:
+## Linting
+
+- Linting uses [golangci-lint](https://golangci-lint.run/), configured in `.golangci.yml` and installed by mise.
+- CI runs `mise run lint` on pull requests, so run it locally first:
 
 ```bash
-mise run chainsaw:test-single test/chainsaw/altinnresource/dummy-test
+mise run lint       # check
+mise run lint:fix   # check and apply automatic fixes
 ```
 
 ## Git conventions
@@ -126,14 +128,14 @@ behaviour.
 
 ## Managing dependencies and patching vulnerabilities
 
-### Managing Kubernetes, Istio and CertManager versions
-These versions are defined in the top of the `Makefile`, and are used when running locally and when testing in CI/CD.
-Versions should match the versions running in your production Kubernetes cluster.
+### Managing Kubernetes versions
+This version is defined in the top of the `[env]` section in [mise.toml](mise.toml), and is used when running locally and 
+when testing in CI/CD. Version should match the version running in your production Kubernetes cluster.
 
 ### Managing helper tools
-Versions for helper tools like Kustomize, Chainsaw, Kubectl etc. are defined in the top of the `Makefile`. Versions
-should be updated either regularly, or as is required when updating other dependencies (such as upgrading Chainsaw when
-updating Go version).
+Versions for helper tools like Kustomize, Chainsaw, Kubectl etc. are defined under the `[tools]` section in [mise.toml](mise.toml). 
+Versions should be updated either regularly, or as is required when updating other dependencies (such as upgrading 
+Chainsaw when updating Go version).
 
 ### Updating Go version
 #### Updating Go version
@@ -142,24 +144,14 @@ updating Go version).
    or by googling "Go <old_version> to <new_version> migration guide"
 3. Ensure there exists a compatible Chainsaw version for the chosen Go version, for instance by checking [the latest Chainsaw releases](https://github.com/kyverno/chainsaw/releases).
    The version of Chainsaw must support the same major and minor version as your chosen Go version. Patch versions may
-   typically be updated without updating Chainsaw. If necessary, update `CHAINSAW_VERSION` in the `Makefile`
+   typically be updated without updating Chainsaw. If necessary, update the Chainsaw tool version in [mise.toml](mise.toml)
 4. Update Go version in `go.mod`
 5. Perform dependency updates for direct dependencies with `go get -u ./...`
-6. Revert any changes made to `github.com/nais/liberator`. Liberator must be updated separately.
-7. Run `go mod tidy`
+6. Run `go mod tidy`
 
 #### Updating Golang base image version
 1. Find a Golang docker image [on Docker Hub](https://hub.docker.com/_/golang/tags) corresponding to the Go version you
    updated to previously. As of August 2026, this is called "1.26.6-alpine3.24".
 2. Copy the "index digest" (top left), and paste into all relevant dockerfiles:
-   3. hack/mock_controller/Dockerfile
-   4. Dockerfile
-   5. Dockerfile.goreleaser
-
-#### Verify linting and tests
-1. Run `make lint`. This ensures both that the linting is correct, and that the version of `golangci-lint` supports the
-   new Go version. If the version of `golangci-lint` does not support the new version of Go, update
-   `GOLANGCI_LINT_VERSION` in the `Makefile`. If there are linting errors after updating the linter version, solve these
-   either by running `make lint-fix` or resolving manually
-2. Follow guides above to run tests (with `make test`) and e2e-tests (with `make chainsaw-test-all`), and ensure all
-   tests pass
+   1. Dockerfile
+   2. Dockerfile.goreleaser
