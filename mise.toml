@@ -6,7 +6,7 @@ idiomatic_version_file_enable_tools = ["go"]
 postinstall = './scripts/setup-ide.sh'
 
 [env]
-KUBERNETES_VERSION = "1.35.1"
+KUBERNETES_VERSION = "1.36.4"
 KIND_CLUSTER_NAME = "{{ get_env(name='KIND_CLUSTER_NAME', default='altinnator') }}"
 KUBECONTEXT = "{{ get_env(name='KUBECONTEXT', default='kind-' ~ get_env(name='KIND_CLUSTER_NAME', default='altinnator')) }}"
 # Pinned by digest so local runs and the api-docs workflow render identically.
@@ -14,8 +14,8 @@ CRDOC_IMAGE = "{{ get_env(name='CRDOC_IMAGE', default='ghcr.io/fybrik/crdoc@sha2
 
 [tools]
 # Go itself is resolved from go.mod via idiomatic_version_file_enable_tools.
-kubectl = "1.35.1" # keep in sync with KUBERNETES_VERSION above
-kind = "0.31.0"
+kubectl = "1.36.4" # keep in sync with KUBERNETES_VERSION above
+kind = "0.33.0"
 kustomize = "5.8.1"
 golangci-lint = "2.15.0"
 k9s = "0.51.0"
@@ -255,7 +255,7 @@ if [ "$deployed" = "1" ]; then echo "✅ altinnator is deployed an running in th
 # Testing
 # ---------------------------------------------------------------------------
 
-# envtest only publishes some patch versions, so it takes the minor version of KUBERNETES_VERSION (i.e. 1.35.1 -> 1.35).
+# envtest only publishes some patch versions, so it takes the minor version of KUBERNETES_VERSION (i.e. 1.36.4 -> 1.36).
 [tasks."test:envtest"]
 description = "Download the binaries required for envtest into ./bin and print their path."
 run = '''
