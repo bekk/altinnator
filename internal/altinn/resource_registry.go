@@ -1,12 +1,15 @@
 package altinn
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"regexp"
 	"slices"
@@ -30,6 +33,14 @@ var ErrNotFound = errors.New("not found in Altinn")
 
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
+	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
+}
+
+// AccessTokenProvider gives the Altinn token a write needs.
+type AccessTokenProvider interface {
+	AccessToken(ctx context.Context) (string, error)
+	// Refused is told when Altinn refuses token, so the next call does not get it again.
+	Refused(token string)
 }
 
 type MaskinportenSchema struct {
@@ -50,12 +61,14 @@ type MultilingualText struct {
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+	tokens     AccessTokenProvider
 }
 
 var _ ResourceRegistry = (*Client)(nil)
 
-func NewClient(baseURL string, httpClient *http.Client) *Client {
-	return &Client{baseURL: baseURL, httpClient: httpClient}
+// NewClient takes the tokens writes need from tokens. A client that only reads may pass nil.
+func NewClient(baseURL string, httpClient *http.Client, tokens AccessTokenProvider) *Client {
+	return &Client{baseURL: baseURL, httpClient: httpClient, tokens: tokens}
 }
 
 // GetMaskinportenSchema fails with ErrNotFound when Kartverket has no MaskinportenSchema with this id, also when Altinn
@@ -69,6 +82,78 @@ func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*Maskinp
 		return nil, fmt.Errorf("MaskinportenSchema %s: %w", id, ErrNotFound)
 	}
 	return r.toMaskinportenSchema(id), nil
+}
+
+// SetMaskinportenSchemaPolicy gives the MaskinportenSchema the policy every MaskinportenSchema gets, in place of any
+// policy it has. It fails with ErrNotFound, and changes nothing, when Kartverket has no MaskinportenSchema with this id.
+func (c *Client) SetMaskinportenSchemaPolicy(ctx context.Context, id string) error {
+	if c.tokens == nil {
+		return errors.New("setting a policy needs an AccessTokenProvider")
+	}
+	// Without this check, the policy could replace the one on another kind of Kartverket resource
+	if _, err := c.GetMaskinportenSchema(ctx, id); err != nil {
+		return err
+	}
+
+	policyURL, err := url.JoinPath(c.baseURL, resourcePath, id, "policy")
+	if err != nil {
+		return fmt.Errorf("building the policy URL of resource %s: %w", id, err)
+	}
+	body, contentType, err := policyForm(maskinportenSchemaPolicy(id))
+	if err != nil {
+		return fmt.Errorf("building the policy of resource %s: %w", id, err)
+	}
+	if err := c.write(ctx, http.MethodPut, policyURL, contentType, body, http.StatusCreated); err != nil {
+		return fmt.Errorf("setting the policy of resource %s in Altinn: %w", id, err)
+	}
+	return nil
+}
+
+// Altinn takes the policy as a file in the form field policyFile
+func policyForm(policy string) ([]byte, string, error) {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", `form-data; name="policyFile"; filename="policy.xml"`)
+	header.Set("Content-Type", "application/xml")
+	part, err := form.CreatePart(header)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := part.Write([]byte(policy)); err != nil {
+		return nil, "", err
+	}
+	if err := form.Close(); err != nil {
+		return nil, "", err
+	}
+	return body.Bytes(), form.FormDataContentType(), nil
+}
+
+func (c *Client) write(ctx context.Context, method, target, contentType string, body []byte, success int) error {
+	token, err := c.tokens.AccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("getting a token for Altinn: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", contentType)
+	request.Header.Set("Authorization", "Bearer "+token)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("calling Altinn: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	if response.StatusCode == success {
+		return nil
+	}
+	if response.StatusCode == http.StatusUnauthorized {
+		c.tokens.Refused(token)
+	}
+	return errors.New(responded(response))
 }
 
 func (c *Client) getResource(ctx context.Context, id string) (*resource, error) {
