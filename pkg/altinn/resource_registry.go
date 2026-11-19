@@ -1,16 +1,21 @@
 package altinn
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/kartverket/altinnator/internal/altinn/auth"
 )
 
 const (
@@ -32,6 +37,13 @@ var (
 
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
+	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
+}
+
+type AccessTokenProvider interface {
+	Token(ctx context.Context) (auth.Token, error)
+	// Refused is told when Altinn refuses token, so the next call does not get it again.
+	Refused(token auth.Token)
 }
 
 type MaskinportenSchema struct {
@@ -50,20 +62,29 @@ type MultilingualText struct {
 }
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	orgNumber  string
+	baseURL       string
+	httpClient    *http.Client
+	orgNumber     string
+	tokenProvider AccessTokenProvider
 }
 
 var _ ResourceRegistry = (*Client)(nil)
 
-func NewClient(baseURL string, httpClient *http.Client, orgNumber string) *Client {
-	return &Client{baseURL: baseURL, httpClient: httpClient, orgNumber: orgNumber}
+func NewClient(baseURL string, httpClient *http.Client, orgNumber string, tokenProvider AccessTokenProvider) *Client {
+	return &Client{baseURL: baseURL, httpClient: httpClient, orgNumber: orgNumber, tokenProvider: tokenProvider}
 }
 
 // GetMaskinportenSchema fails with ErrNotFound when Altinn has no resource with this id, and with ErrTaken when the
 // resource with this id is of another type or owned by another organisation.
 func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error) {
+	r, err := c.getOwnedMaskinportenSchema(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return r.toMaskinportenSchema(id), nil
+}
+
+func (c *Client) getOwnedMaskinportenSchema(ctx context.Context, id string) (*resource, error) {
 	r, err := c.getResource(ctx, id)
 	if err != nil {
 		return nil, err
@@ -72,7 +93,80 @@ func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*Maskinp
 		return nil, fmt.Errorf("resource %s is a %s owned by %s: %w",
 			id, r.ResourceType, r.HasCompetentAuthority.Organization, ErrTaken)
 	}
-	return r.toMaskinportenSchema(id), nil
+	return r, nil
+}
+
+// SetMaskinportenSchemaPolicy gives the MaskinportenSchema the policy every MaskinportenSchema gets, in place of any
+// policy it has. Like GetMaskinportenSchema, it fails with ErrNotFound or ErrTaken, and changes nothing, when the
+// organisation has no MaskinportenSchema with this id.
+func (c *Client) SetMaskinportenSchemaPolicy(ctx context.Context, id string) error {
+	if c.tokenProvider == nil {
+		return errors.New("setting a policy needs an AccessTokenProvider")
+	}
+	// Altinn's policy endpoint doesn't check the type, so this keeps the policy off the organisation's other resources
+	if _, err := c.getOwnedMaskinportenSchema(ctx, id); err != nil {
+		return err
+	}
+
+	policyURL, err := url.JoinPath(c.baseURL, resourcePath, id, "policy")
+	if err != nil {
+		return fmt.Errorf("building the policy URL of resource %s: %w", id, err)
+	}
+	body, contentType, err := policyForm(maskinportenSchemaPolicy(id))
+	if err != nil {
+		return fmt.Errorf("building the policy of resource %s: %w", id, err)
+	}
+	if err := c.write(ctx, http.MethodPut, policyURL, contentType, body, http.StatusCreated); err != nil {
+		return fmt.Errorf("setting the policy of resource %s in Altinn: %w", id, err)
+	}
+	return nil
+}
+
+// Altinn takes the policy as a file in the form field policyFile
+func policyForm(policy string) ([]byte, string, error) {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", `form-data; name="policyFile"; filename="policy.xml"`)
+	header.Set("Content-Type", "application/xml")
+	part, err := form.CreatePart(header)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := part.Write([]byte(policy)); err != nil {
+		return nil, "", err
+	}
+	if err := form.Close(); err != nil {
+		return nil, "", err
+	}
+	return body.Bytes(), form.FormDataContentType(), nil
+}
+
+func (c *Client) write(ctx context.Context, method, target, contentType string, body []byte, success int) error {
+	token, err := c.tokenProvider.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("getting a token for Altinn: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", contentType)
+	request.Header.Set("Authorization", "Bearer "+token.Reveal())
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("calling Altinn: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	if response.StatusCode == success {
+		return nil
+	}
+	if response.StatusCode == http.StatusUnauthorized {
+		c.tokenProvider.Refused(token)
+	}
+	return errors.New(responded(response))
 }
 
 func (c *Client) getResource(ctx context.Context, id string) (*resource, error) {
