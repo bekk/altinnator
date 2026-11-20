@@ -1,2 +1,3 @@
 resources:
 - bases/altinnator.kartverket.no_altinnresources.yaml
+- bases/altinnator.kartverket.no_maskinportenschemaresources.yaml
