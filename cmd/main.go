@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
+	"github.com/kartverket/altinnator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -157,6 +158,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.MaskinportenSchemaResourceReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MaskinportenSchemaResource")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

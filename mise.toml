@@ -261,12 +261,13 @@ if [ "$deployed" = "1" ]; then echo "✅ altinnator is deployed an running in th
 # ---------------------------------------------------------------------------
 
 # envtest only publishes some patch versions, so it takes the minor version of KUBERNETES_VERSION (i.e. 1.36.4 -> 1.36).
+# The path must be absolute: go test runs each package's tests from that package's directory.
 [tasks."test:envtest"]
 description = "Download the binaries required for envtest into ./bin and print their path."
 run = '''
 k8s_version="${KUBERNETES_VERSION%.*}"
 echo "Setting up envtest binaries for Kubernetes version $k8s_version..." >&2
-setup-envtest use "$k8s_version" --bin-dir bin -p path
+setup-envtest use "$k8s_version" --bin-dir "$MISE_PROJECT_ROOT/bin" -p path
 '''
 
 [tasks.test]
@@ -289,7 +290,7 @@ run = [
 ]
 
 [tasks."chainsaw:test-single"]
-description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/maskinportenschemaresource/<test>'."
+description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/<kind>/<test>'."
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
   { task = "cluster:local" },

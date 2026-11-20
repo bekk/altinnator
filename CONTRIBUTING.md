@@ -72,6 +72,7 @@ mise run test
 ```
 
 - The behavioral tests use [Ginkgo](https://onsi.github.io/ginkgo/) and [Gomega](https://onsi.github.io/gomega/).
+  Tests of CRD validation are among them, next to the types in [api/v1alpha1](api/v1alpha1), and run against envtest.
   For the best experience writing and running them in a JetBrains IDE, install the
   [Ginkgo plugin](https://plugins.jetbrains.com/plugin/17554-ginkgo). It requires:
   - IntelliJ IDEA Ultimate or GoLand (it relies on the Go plugin).
@@ -83,7 +84,7 @@ mise run test
 
 ```bash
 mise run chainsaw:test-all
-mise run chainsaw:test-single test/chainsaw/maskinportenschemaresource/validation
+mise run chainsaw:test-single test/chainsaw/<kind>/<test>
 ```
 
 ## Linting

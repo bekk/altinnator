@@ -1,1 +1,2 @@
-resources: []
+resources:
+- bases/altinnator.kartverket.no_maskinportenschemaresources.yaml
