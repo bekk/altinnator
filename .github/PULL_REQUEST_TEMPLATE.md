@@ -12,5 +12,6 @@ _To be done before it is marked ready for review._
 
 - [ ] README.md is updated where needed
 - [ ] CONTRIBUTING.md is updated where needed
+- [ ] AGENTS.md is updated where needed
 - [ ] Tests are added/updated where needed
 - [ ] Code in this PR was written using AI
