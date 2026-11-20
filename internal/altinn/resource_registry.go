@@ -3,6 +3,7 @@ package altinn
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,8 @@ var resourceIDPattern = regexp.MustCompile(`^[a-z0-9_-]{4,}$`)
 
 // Altinn's own routes next to the resources, which win over a resource with the same id
 var fixedRoutes = []string{"resourcelist", "export", "search", "updated", "changes", "orgs"}
+
+var ErrNotFound = errors.New("not found in Altinn")
 
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
@@ -55,15 +58,15 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 	return &Client{baseURL: baseURL, httpClient: httpClient}
 }
 
-// GetMaskinportenSchema returns nil when Kartverket has no MaskinportenSchema with this id, also when Altinn has a
-// resource with the id that is of another type or owned by another organisation.
+// GetMaskinportenSchema fails with ErrNotFound when Kartverket has no MaskinportenSchema with this id, also when Altinn
+// has a resource with the id that is of another type or owned by another organisation.
 func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error) {
 	r, err := c.getResource(ctx, id)
-	if err != nil || r == nil {
+	if err != nil {
 		return nil, err
 	}
 	if r.ResourceType != maskinportenSchemaType || r.HasCompetentAuthority.Organization != kartverketOrganization {
-		return nil, nil
+		return nil, fmt.Errorf("MaskinportenSchema %s: %w", id, ErrNotFound)
 	}
 	return r.toMaskinportenSchema(id), nil
 }
@@ -95,7 +98,7 @@ func (c *Client) getResource(ctx context.Context, id string) (*resource, error) 
 	switch response.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return nil, nil
+		return nil, fmt.Errorf("resource %s: %w", id, ErrNotFound)
 	default:
 		return nil, fmt.Errorf("getting resource %s from Altinn: %s", id, responded(response))
 	}

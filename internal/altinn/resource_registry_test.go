@@ -73,16 +73,15 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 		Expect(requests[0].Header.Get("Accept")).To(Equal("application/json"))
 	})
 
-	DescribeTable("returns nil when Kartverket has no MaskinportenSchema with the id",
+	DescribeTable("fails with ErrNotFound when Kartverket has no MaskinportenSchema with the id",
 		func(body string) {
 			if body != "" {
 				responses["/resourceregistry/api/v1/resource/some-resource"] = response{http.StatusOK, body}
 			}
 
-			schema, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
+			_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(schema).To(BeNil())
+			Expect(err).To(MatchError(altinn.ErrNotFound))
 		},
 		Entry("when Altinn has no resource with the id", ""),
 		Entry("when the resource is another organisation's",
