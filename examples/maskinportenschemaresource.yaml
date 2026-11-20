@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+---
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: MaskinportenSchemaResource
+metadata:
+  name: eksempel-api
+  namespace: test
+spec:
+  scopes:
+    - name: kartverk:eksempel:les
+    - name: kartverk:eksempel:skriv
+  delegationDescription:
+    en: Gives access to the example API on behalf of your organisation.
+    nb: Gir tilgang til eksempel-API-et på vegne av virksomheten din.
+    nn: Gjev tilgang til eksempel-API-et på vegner av verksemda di.
+  title:
+    en: Kartverket's example API
+    nb: Kartverkets eksempel-API
+    nn: Kartverket sitt eksempel-API
+  description:
+    en: Read and write data in Kartverket's example API.
+    nb: Les og skriv data i Kartverkets eksempel-API.
+    nn: Les og skriv data i Kartverket sitt eksempel-API.
+  resourceId: kv-eksempel-api
+  homepage: https://example.no/eksempel-api
+  contactPoints:
+    - email: kundesenter@example.no
+      category: Kartverket kundesenter e-post
+    - telephone: "+47 00 00 00 00"
+      category: Kartverket telefon
+    - contactpage: https://example.no/kontakt
+      category: Kartverket kontaktside
+  keywords:
+    - word: matrikkel
+      language: en
+    - word: kartverket
+      language: nb
+  visible: true
