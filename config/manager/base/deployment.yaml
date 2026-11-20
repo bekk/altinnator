@@ -29,6 +29,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: altinnator-env
+            - secretRef:
+                name: altinnator-maskinporten
           image: altinnator:latest
           imagePullPolicy: Never
           livenessProbe:

@@ -37,10 +37,12 @@ run = [
   { task = "check:not-deployed" },
   '''
   # Not sourced as shell: values are taken literally, as kustomize does for the cluster.
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in ''|'#'*) continue ;; esac
-    export "$line"
-  done < config/manager/base/.env
+  for env_file in config/manager/base/.env config/manager/base/maskinporten.env; do
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in ''|'#'*) continue ;; esac
+      export "$line"
+    done < "$env_file"
+  done
   go run ./cmd/main.go
   ''',
 ]
@@ -194,11 +196,23 @@ run = "./scripts/create-altinnator-namespace.sh"
 [tasks."cluster:local"]
 description = "Set up local development environment."
 run = [
+  { task = "env:local" },
   { task = "cluster:create" },
   { task = "cluster:namespace" },
   { task = "check:local" },
   { task = "crds:install" },
 ]
+
+# maskinporten.env is gitignored, so it can hold a real key. Its example only has the local key the mock accepts.
+[tasks."env:local"]
+description = "Create config/manager/base/maskinporten.env from its example if it is missing."
+run = '''
+env_file=config/manager/base/maskinporten.env
+if [ ! -f "$env_file" ]; then
+  cp "$env_file.example" "$env_file"
+  echo "✅ Created $env_file from its example, with the local Maskinporten key for the mock."
+fi
+'''
 
 [tasks."cluster:clean"]
 description = "Clean up local environment by deleting the kind cluster."

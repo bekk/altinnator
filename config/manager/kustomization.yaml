@@ -17,3 +17,9 @@ configMapGenerator:
   - base/.env
   name: altinnator-env
   namespace: altinnator-system
+
+secretGenerator:
+- envs:
+  - base/maskinporten.env
+  name: altinnator-maskinporten
+  namespace: altinnator-system
