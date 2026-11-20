@@ -90,11 +90,10 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 			`{"resourceType": "GenericAccessResource", "hasCompetentAuthority": {"organization": "971040238"}}`),
 	)
 
-	It("returns nil without calling Altinn when the id is one of Altinn's routes", func() {
-		schema, err := client.GetMaskinportenSchema(context.Background(), "search")
+	It("fails without calling Altinn when the id is one of Altinn's routes", func() {
+		_, err := client.GetMaskinportenSchema(context.Background(), "search")
 
-		Expect(err).NotTo(HaveOccurred())
-		Expect(schema).To(BeNil())
+		Expect(err).To(MatchError(ContainSubstring(`"search" is one of Altinn's routes`)))
 		Expect(requests).To(BeEmpty())
 	})
 

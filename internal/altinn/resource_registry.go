@@ -71,7 +71,7 @@ func (c *Client) getResource(ctx context.Context, id string) (*resource, error) 
 		return nil, fmt.Errorf("expected a resource id of 4 or more of a-z, 0-9, _ and -, but was %q", id)
 	}
 	if slices.Contains(fixedRoutes, id) {
-		return nil, nil
+		return nil, fmt.Errorf("resource id %q is one of Altinn's routes, so Altinn can't return the resource", id)
 	}
 
 	resourceURL, err := url.JoinPath(c.baseURL, resourcePath, id)
