@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	"github.com/kartverket/altinnator/internal/altinn"
 	. "github.com/onsi/ginkgo/v2"
@@ -109,7 +110,23 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 
 		_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
 
-		Expect(err).To(MatchError(ContainSubstring("responded 503")))
+		Expect(err).To(MatchError(HaveSuffix("responded 503")))
+	})
+
+	It("fails with what Altinn answered when it responds with an error", func() {
+		responses["/resourceregistry/api/v1/resource/some-resource"] = response{http.StatusForbidden, `{"title": "Forbidden"}`}
+
+		_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
+
+		Expect(err).To(MatchError(HaveSuffix(`responded 403: {"title": "Forbidden"}`)))
+	})
+
+	It("fails with only the start of a long answer from Altinn", func() {
+		responses["/resourceregistry/api/v1/resource/some-resource"] = response{http.StatusBadGateway, strings.Repeat("x", 2000)}
+
+		_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
+
+		Expect(err).To(MatchError(HaveSuffix("responded 502: " + strings.Repeat("x", 1024))))
 	})
 
 	It("fails when Altinn responds with something other than a resource", func() {

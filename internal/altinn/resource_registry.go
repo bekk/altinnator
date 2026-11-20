@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 const (
@@ -95,7 +97,7 @@ func (c *Client) getResource(ctx context.Context, id string) (*resource, error) 
 	case http.StatusNotFound:
 		return nil, nil
 	default:
-		return nil, fmt.Errorf("getting resource %s from Altinn: responded %d", id, response.StatusCode)
+		return nil, fmt.Errorf("getting resource %s from Altinn: %s", id, responded(response))
 	}
 
 	var r resource
@@ -103,6 +105,15 @@ func (c *Client) getResource(ctx context.Context, id string) (*resource, error) 
 		return nil, fmt.Errorf("parsing resource %s from Altinn: %w", id, err)
 	}
 	return &r, nil
+}
+
+// The body is capped, so an error page in HTML does not flood the log
+func responded(response *http.Response) string {
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 1024))
+	if strings.TrimSpace(string(body)) == "" {
+		return fmt.Sprintf("responded %d", response.StatusCode)
+	}
+	return fmt.Sprintf("responded %d: %s", response.StatusCode, body)
 }
 
 type resource struct {
