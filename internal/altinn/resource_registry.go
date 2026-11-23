@@ -17,7 +17,7 @@ const (
 	resourcePath           = "/resourceregistry/api/v1/resource"
 	maskinportenSchemaType = "MaskinportenSchema"
 	maskinportenScopeType  = "MaskinportenScope"
-	kartverketOrganization = "971040238"
+	kartverketOrgNumber    = "971040238"
 )
 
 // Altinn's rule for an identifier. Altinn gets it in the path, so it also keeps "/" and ".." out of the URL
@@ -68,7 +68,7 @@ func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*Maskinp
 	if err != nil {
 		return nil, err
 	}
-	if r.ResourceType != maskinportenSchemaType || r.HasCompetentAuthority.Organization != kartverketOrganization {
+	if r.ResourceType != maskinportenSchemaType || r.HasCompetentAuthority.Organization != kartverketOrgNumber {
 		return nil, fmt.Errorf("resource %s is a %s owned by %s: %w",
 			id, r.ResourceType, r.HasCompetentAuthority.Organization, ErrTaken)
 	}
