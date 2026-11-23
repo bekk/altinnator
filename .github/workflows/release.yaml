@@ -16,7 +16,6 @@ env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
   RBAC_FILE_PATH: config/rbac/role.yaml
-  CRD_ALTINN_RESOURCE_FILE_PATH: config/crd/bases/altinnator.kartverket.no_altinnresources.yaml
   ARTIFACT_NAME: altinnator-artifact-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:

@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: test-altinnresource-fa0b98e2
-data:
-  extra_key: extra_value
-  optional_key: optional_value
-  required_key: required_value

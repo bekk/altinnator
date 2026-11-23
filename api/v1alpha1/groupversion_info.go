@@ -37,10 +37,7 @@ var (
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(GroupVersion,
-		&AltinnResource{},
-		&AltinnResourceList{},
-	)
+	scheme.AddKnownTypes(GroupVersion)
 
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

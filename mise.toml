@@ -153,7 +153,10 @@ run = [
   { task = "generate" },
   '''
   crds="$(kustomize build config/crd)"
-  echo "$crds" | kubectl apply --context "$KUBECONTEXT" -f -
+  # kubectl refuses empty input, and config/crd is empty while altinnator has no CRDs.
+  if [ -n "$crds" ]; then
+    echo "$crds" | kubectl apply --context "$KUBECONTEXT" -f -
+  fi
   rbac="$(kustomize build config/rbac)"
   echo "$rbac" | kubectl apply --context "$KUBECONTEXT" -f -
   ''',
@@ -166,7 +169,9 @@ run = [
   { task = "generate" },
   '''
   crds="$(kustomize build config/crd)"
-  echo "$crds" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+  if [ -n "$crds" ]; then
+    echo "$crds" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+  fi
   rbac="$(kustomize build config/rbac)"
   echo "$rbac" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
   ''',
@@ -284,7 +289,7 @@ run = [
 ]
 
 [tasks."chainsaw:test-single"]
-description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/altinnresource/<test>'."
+description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/maskinportenschemaresource/<test>'."
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
   { task = "cluster:local" },
