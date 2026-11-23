@@ -79,7 +79,7 @@ var _ = Describe("Client.SetMaskinportenSchemaPolicy", func() {
 			w.WriteHeader(policyStatus)
 		}))
 		DeferCleanup(server.Close)
-		client = altinn.NewClient(server.URL, server.Client(), "971040238", tokenProvider)
+		client = altinn.NewClient(server.URL, server.Client(), "971040238", "kv", tokenProvider)
 	})
 
 	It("puts the policy as the form file policyFile, with a token", func() {
@@ -132,7 +132,7 @@ var _ = Describe("Client.SetMaskinportenSchemaPolicy", func() {
 	})
 
 	It("fails without calling Altinn when the client has no token provider", func() {
-		readOnly := altinn.NewClient(server.URL, server.Client(), "971040238", nil)
+		readOnly := altinn.NewClient(server.URL, server.Client(), "971040238", "kv", nil)
 
 		err := readOnly.SetMaskinportenSchemaPolicy(context.Background(), "kv-matrikkel-brukernavn")
 

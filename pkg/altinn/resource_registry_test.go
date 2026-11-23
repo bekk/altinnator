@@ -51,7 +51,7 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 			_, _ = w.Write([]byte(res.body))
 		}))
 		DeferCleanup(server.Close)
-		client = altinn.NewClient(server.URL, server.Client(), "971040238", nil)
+		client = altinn.NewClient(server.URL, server.Client(), "971040238", "kv", nil)
 	})
 
 	It("returns Kartverket's MaskinportenSchema", func() {
