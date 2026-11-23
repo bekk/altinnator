@@ -284,7 +284,7 @@ run = [
 ]
 
 [tasks."chainsaw:test-single"]
-description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/altinnresource/<test>'."
+description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single test/chainsaw/maskinportenschemaresource/<test>'."
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
   { task = "cluster:local" },

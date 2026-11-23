@@ -42,10 +42,6 @@ linters:
       - linters:
           - goconst
         path: _test\.go
-      - linters:
-          - goconst
-        path: internal/reconciler/resources.go
-        text: ServiceEntry
     paths:
       - third_party$
       - builtin$
