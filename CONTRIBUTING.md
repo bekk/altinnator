@@ -83,7 +83,7 @@ mise run test
 
 ```bash
 mise run chainsaw:test-all
-mise run chainsaw:test-single test/chainsaw/altinnresource/dummy-test
+mise run chainsaw:test-single test/chainsaw/maskinportenschemaresource/validation
 ```
 
 ## Linting

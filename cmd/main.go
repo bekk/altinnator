@@ -158,14 +158,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.AltinnResourceReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorder("altinnresource-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AltinnResource")
-		os.Exit(1)
-	}
 	if err = (&controller.MaskinportenSchemaResourceReconciler{
 		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {

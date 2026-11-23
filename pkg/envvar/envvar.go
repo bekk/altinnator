@@ -1,22 +1,12 @@
 package envvar
 
 import (
-	"encoding/json"
-
 	"github.com/kelseyhightower/envconfig"
 )
 
 var envVars EnvironmentalVariables
 
-type AdditionalConfigMapData map[string]string
-
-type EnvironmentalVariables struct {
-	AdditionalConfigMapData AdditionalConfigMapData `split_words:"true" required:"true"`
-}
-
-func (a *AdditionalConfigMapData) Decode(value string) error {
-	return json.Unmarshal([]byte(value), a)
-}
+type EnvironmentalVariables struct{}
 
 func Load() error {
 	var loaded EnvironmentalVariables
