@@ -67,13 +67,13 @@ spec:
                   is delegated.
                 properties:
                   en:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nb:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nn:
-                    minLength: 1
+                    pattern: \S
                     type: string
                 required:
                 - en
@@ -84,13 +84,13 @@ spec:
                 description: Description says what the resource is.
                 properties:
                   en:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nb:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nn:
-                    minLength: 1
+                    pattern: \S
                     type: string
                 required:
                 - en
@@ -113,7 +113,7 @@ spec:
                 type: array
               resourceId:
                 description: ResourceID is the resource's identifier in Altinn. It
-                  cannot be changed once set.
+                  cannot be changed.
                 pattern: ^[a-z0-9_-]{4,}$
                 type: string
                 x-kubernetes-validations:
@@ -121,46 +121,34 @@ spec:
                   rule: self == oldSelf
               scopes:
                 description: Scopes are the Maskinporten scopes the resource gives
-                  access to.
+                  access to. No OAuth scope can contain whitespace.
                 items:
-                  description: Scope is a Maskinporten scope.
-                  properties:
-                    name:
-                      description: Name is the scope's name. No OAuth scope can contain
-                        whitespace.
-                      pattern: ^\S+$
-                      type: string
-                  required:
-                  - name
-                  type: object
+                  pattern: ^\S+$
+                  type: string
                 minItems: 1
                 type: array
-                x-kubernetes-list-map-keys:
-                - name
-                x-kubernetes-list-type: map
+                x-kubernetes-list-type: set
               title:
                 description: Title is the resource's name in Altinn.
                 properties:
                   en:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nb:
-                    minLength: 1
+                    pattern: \S
                     type: string
                   nn:
-                    minLength: 1
+                    pattern: \S
                     type: string
                 required:
                 - en
                 - nb
                 - nn
                 type: object
-              visible:
-                description: Visible is whether the resource is shown in Altinn.
-                type: boolean
             required:
             - delegationDescription
             - description
+            - resourceId
             - scopes
             - title
             type: object

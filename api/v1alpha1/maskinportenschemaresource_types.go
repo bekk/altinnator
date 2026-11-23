@@ -6,13 +6,13 @@ import (
 
 // MaskinportenSchemaResourceSpec defines the desired state of MaskinportenSchemaResource.
 type MaskinportenSchemaResourceSpec struct {
-	// Scopes are the Maskinporten scopes the resource gives access to.
+	// Scopes are the Maskinporten scopes the resource gives access to. No OAuth scope can contain whitespace.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
-	// +listType=map
-	// +listMapKey=name
-	Scopes []Scope `json:"scopes"`
+	// +kubebuilder:validation:items:Pattern=`^\S+$`
+	// +listType=set
+	Scopes []string `json:"scopes"`
 
 	// DelegationDescription says what is given when access is delegated.
 	//
@@ -29,12 +29,12 @@ type MaskinportenSchemaResourceSpec struct {
 	// +kubebuilder:validation:Required
 	Description MultilingualText `json:"description"`
 
-	// ResourceID is the resource's identifier in Altinn. It cannot be changed once set.
+	// ResourceID is the resource's identifier in Altinn. It cannot be changed.
 	//
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^[a-z0-9_-]{4,}$`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="resourceId cannot be changed"
-	ResourceID string `json:"resourceId,omitempty"`
+	ResourceID string `json:"resourceId"`
 
 	// Homepage is a web page about the resource.
 	//
@@ -50,34 +50,21 @@ type MaskinportenSchemaResourceSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	Keywords []Keyword `json:"keywords,omitempty"`
-
-	// Visible is whether the resource is shown in Altinn.
-	//
-	// +kubebuilder:validation:Optional
-	Visible *bool `json:"visible,omitempty"`
-}
-
-// Scope is a Maskinporten scope.
-type Scope struct {
-	// Name is the scope's name. No OAuth scope can contain whitespace.
-	//
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^\S+$`
-	Name string `json:"name"`
 }
 
 // MultilingualText is a text in the three languages Altinn requires.
+// Altinn counts a text that is only whitespace as missing.
 type MultilingualText struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`\S`
 	En string `json:"en"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`\S`
 	Nb string `json:"nb"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`\S`
 	Nn string `json:"nn"`
 }
 

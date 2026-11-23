@@ -1,0 +1,44 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: maskinportenschemaresource-validation
+spec:
+  steps:
+    - name: Accept a valid MaskinportenSchemaResource
+      try:
+        - create:
+            file: maskinportenschemaresource.yaml
+        - assert:
+            file: maskinportenschemaresource.yaml
+    - name: Refuse a change of resourceId
+      try:
+        - patch:
+            file: changed-resource-id.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'resourceId cannot be changed')): true
+    - name: Refuse removing resourceId
+      try:
+        - patch:
+            file: removed-resource-id.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  "(contains($error, 'spec.resourceId: Required value'))": true
+    - name: Refuse a text Altinn would count as missing
+      try:
+        - patch:
+            file: blank-text.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.title.nn in body should match')): true
+    - name: Refuse a resourceId Altinn would refuse
+      try:
+        - create:
+            file: invalid-resource-id.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.resourceId in body should match')): true

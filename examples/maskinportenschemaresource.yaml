@@ -10,8 +10,8 @@ metadata:
   namespace: test
 spec:
   scopes:
-    - name: kartverk:eksempel:les
-    - name: kartverk:eksempel:skriv
+    - kartverk:eksempel:les
+    - kartverk:eksempel:skriv
   delegationDescription:
     en: Gives access to the example API on behalf of your organisation.
     nb: Gir tilgang til eksempel-API-et på vegne av virksomheten din.
@@ -38,4 +38,3 @@ spec:
       language: en
     - word: kartverket
       language: nb
-  visible: true
