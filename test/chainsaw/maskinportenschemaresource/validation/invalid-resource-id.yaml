@@ -1,0 +1,20 @@
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: MaskinportenSchemaResource
+metadata:
+  name: invalid-resource-id
+spec:
+  scopes:
+    - kartverk:validation:test
+  delegationDescription:
+    en: Gives access to nothing.
+    nb: Gir tilgang til ingenting.
+    nn: Gjev tilgang til ingenting.
+  title:
+    en: Validation test
+    nb: Valideringstest
+    nn: Valideringstest
+  description:
+    en: A resource for testing validation.
+    nb: En ressurs for å teste validering.
+    nn: Ein ressurs for å teste validering.
+  resourceId: KV.API

@@ -1,0 +1,6 @@
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: MaskinportenSchemaResource
+metadata:
+  name: validation-test
+spec:
+  resourceId: kv-another-id
