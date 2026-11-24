@@ -2,19 +2,28 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
+	"github.com/kartverket/altinnator/internal/altinn"
 	"github.com/kartverket/altinnator/pkg/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+const readyCondition = "Ready"
+
 // MaskinportenSchemaResourceReconciler reconciles a MaskinportenSchemaResource object
 type MaskinportenSchemaResourceReconciler struct {
 	client.Client
+	Registry altinn.ResourceRegistry
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -28,8 +37,10 @@ func (r *MaskinportenSchemaResourceReconciler) SetupWithManager(mgr ctrl.Manager
 }
 
 // +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources,verbs=get;list;watch
+// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources/status,verbs=get;update;patch
 
-// Reconcile only logs the MaskinportenSchemaResource for now.
+// Reconcile makes the resource in Altinn match the MaskinportenSchemaResource, and shows how that went in its Ready
+// condition.
 func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	rLog := log.GetLogger(ctx)
 
@@ -39,14 +50,94 @@ func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, re
 			rLog.Debug("MaskinportenSchemaResource not found. Probably a delete.")
 			return ctrl.Result{}, nil
 		}
-		rLog.Error(err, "Failed to get MaskinportenSchemaResource")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get MaskinportenSchemaResource: %w", err)
 	}
 
-	rLog.Info("Received MaskinportenSchemaResource",
-		"resourceId", resource.Spec.ResourceID,
-		"scopes", resource.Spec.Scopes,
-		"title", resource.Spec.Title.Nb,
-	)
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.report(ctx, resource, r.sync(ctx, resource))
+}
+
+func (r *MaskinportenSchemaResourceReconciler) sync(
+	ctx context.Context,
+	resource *altinnatorv1alpha1.MaskinportenSchemaResource,
+) error {
+	want := schemaFrom(resource.Spec)
+	have, err := r.Registry.GetMaskinportenSchema(ctx, want.ResourceID)
+	switch {
+	case errors.Is(err, altinn.ErrNotFound):
+		err = r.Registry.CreateMaskinportenSchema(ctx, want)
+	case err == nil && differs(want, have):
+		err = r.Registry.UpdateMaskinportenSchema(ctx, want)
+	}
+	if err != nil {
+		return err
+	}
+	// Setting the policy can fail after the resource is created, and the resource then matches the spec on the next
+	// try. Setting it until the resource is ready makes sure it is set.
+	if !meta.IsStatusConditionTrue(resource.Status.Conditions, readyCondition) {
+		return r.Registry.SetMaskinportenSchemaPolicy(ctx, want.ResourceID)
+	}
+	return nil
+}
+
+// report returns err only when trying again may help
+func (r *MaskinportenSchemaResourceReconciler) report(
+	ctx context.Context,
+	resource *altinnatorv1alpha1.MaskinportenSchemaResource,
+	err error,
+) error {
+	ready := metav1.Condition{
+		Type:               readyCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             "Synced",
+		Message:            "The resource in Altinn matches the spec",
+		ObservedGeneration: resource.Generation,
+	}
+	switch {
+	case errors.Is(err, altinn.ErrRejected):
+		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Rejected", err.Error()
+		err = nil
+	case errors.Is(err, altinn.ErrTaken):
+		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Taken", err.Error()
+		err = nil
+	case err != nil:
+		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Failed", err.Error()
+	}
+	if !meta.SetStatusCondition(&resource.Status.Conditions, ready) {
+		return err
+	}
+	return errors.Join(err, r.Status().Update(ctx, resource))
+}
+
+func schemaFrom(spec altinnatorv1alpha1.MaskinportenSchemaResourceSpec) altinn.NewMaskinportenSchema {
+	schema := altinn.NewMaskinportenSchema{
+		ResourceID:            spec.ResourceID,
+		Scopes:                spec.Scopes,
+		Title:                 altinn.MultilingualText(spec.Title),
+		Description:           altinn.MultilingualText(spec.Description),
+		DelegationDescription: altinn.MultilingualText(spec.DelegationDescription),
+		Homepage:              spec.Homepage,
+	}
+	for _, point := range spec.ContactPoints {
+		schema.ContactPoints = append(schema.ContactPoints, altinn.ContactPoint{
+			Category:    point.Category,
+			Email:       point.Email,
+			Telephone:   point.Telephone,
+			ContactPage: point.ContactPage,
+		})
+	}
+	for _, keyword := range spec.Keywords {
+		schema.Keywords = append(schema.Keywords, altinn.Keyword(keyword))
+	}
+	return schema
+}
+
+// slices.Equal counts a missing list and an empty one as the same, so an empty list from Altinn is no change
+func differs(want altinn.NewMaskinportenSchema, have *altinn.MaskinportenSchema) bool {
+	return !slices.Equal(want.Scopes, have.Scopes) ||
+		want.Title != have.Title ||
+		want.Description != have.Description ||
+		want.DelegationDescription != have.DelegationDescription ||
+		want.Homepage != have.Homepage ||
+		!slices.Equal(want.ContactPoints, have.ContactPoints) ||
+		!slices.Equal(want.Keywords, have.Keywords)
 }

@@ -24,6 +24,7 @@ Check it rather than Altinn Studio when it matters how Altinn behaves.
 - Delete is refused in PROD, so removing a resource means withdrawing it (`status: Withdrawn`, not visible, not
   delegable). Its id can never be used again.
 - PUT replaces the whole resource, and even an unchanged PUT makes a new version, so compare before writing.
+- PUT checks only the owner named in the new resource, not the one it replaces, so read the resource before writing.
 - Altinn can't tell Kartverket's teams apart: one token may change every Kartverket resource.
 - 400, 401, 403, 404, 409 and 412 never succeed on retry. 503 and network errors may.
 - A policy is XACML, sent as a file. Altinn answers bad XML with 500.

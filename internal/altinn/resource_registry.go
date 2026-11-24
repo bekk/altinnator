@@ -39,6 +39,7 @@ var (
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
 	CreateMaskinportenSchema(ctx context.Context, schema NewMaskinportenSchema) error
+	UpdateMaskinportenSchema(ctx context.Context, schema NewMaskinportenSchema) error
 	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
 }
 
@@ -54,6 +55,9 @@ type MaskinportenSchema struct {
 	Title                 MultilingualText
 	Description           MultilingualText
 	DelegationDescription MultilingualText
+	Homepage              string
+	ContactPoints         []ContactPoint
+	Keywords              []Keyword
 	Status                string
 }
 
@@ -137,6 +141,33 @@ func (c *Client) CreateMaskinportenSchema(ctx context.Context, schema NewMaskinp
 	}
 	if err != nil {
 		return fmt.Errorf("creating resource %s in Altinn: %w", schema.ResourceID, err)
+	}
+	return nil
+}
+
+// UpdateMaskinportenSchema replaces the MaskinportenSchema in Altinn with schema. Like GetMaskinportenSchema, it fails
+// with ErrNotFound or ErrTaken, and changes nothing, when Kartverket has no MaskinportenSchema with this id. It fails
+// with ErrRejected when Altinn will not take it.
+func (c *Client) UpdateMaskinportenSchema(ctx context.Context, schema NewMaskinportenSchema) error {
+	if c.tokenProvider == nil {
+		return errors.New("updating a resource needs an AccessTokenProvider")
+	}
+	// Altinn checks only the owner named in the new resource, so this keeps the update off other organisations'
+	// resources and Kartverket's resources of other types
+	if _, err := c.GetMaskinportenSchema(ctx, schema.ResourceID); err != nil {
+		return err
+	}
+
+	body, err := json.Marshal(newResourceFrom(schema))
+	if err != nil {
+		return fmt.Errorf("building resource %s: %w", schema.ResourceID, err)
+	}
+	resourceURL, err := url.JoinPath(c.baseURL, resourcePath, schema.ResourceID)
+	if err != nil {
+		return fmt.Errorf("building the URL of resource %s: %w", schema.ResourceID, err)
+	}
+	if _, err := c.write(ctx, http.MethodPut, resourceURL, "application/json", body, http.StatusOK); err != nil {
+		return fmt.Errorf("updating resource %s in Altinn: %w", schema.ResourceID, err)
 	}
 	return nil
 }
@@ -300,6 +331,9 @@ type resource struct {
 	Title                 MultilingualText    `json:"title"`
 	Description           MultilingualText    `json:"description"`
 	RightDescription      MultilingualText    `json:"rightDescription"`
+	Homepage              string              `json:"homepage"`
+	ContactPoints         []ContactPoint      `json:"contactPoints"`
+	Keywords              []Keyword           `json:"keywords"`
 	Status                string              `json:"status"`
 	ResourceReferences    []resourceReference `json:"resourceReferences"`
 	HasCompetentAuthority competentAuthority  `json:"hasCompetentAuthority"`
@@ -327,6 +361,9 @@ func (r *resource) toMaskinportenSchema(id string) *MaskinportenSchema {
 		Title:                 r.Title,
 		Description:           r.Description,
 		DelegationDescription: r.RightDescription,
+		Homepage:              r.Homepage,
+		ContactPoints:         r.ContactPoints,
+		Keywords:              r.Keywords,
 		Status:                r.Status,
 	}
 }

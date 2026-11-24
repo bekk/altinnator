@@ -34,6 +34,32 @@ spec:
               - check:
                   ($error != null): true
                   (contains($error, 'spec.title.nn in body should match')): true
+                  (contains($error, 'spec.description.en in body should match')): true
+                  (contains($error, 'spec.delegationDescription.nb in body should match')): true
+    - name: Refuse a resource without scopes
+      try:
+        - patch:
+            file: no-scopes.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.scopes in body should have at least 1 items')): true
+    - name: Refuse the same scope twice
+      try:
+        - patch:
+            file: duplicate-scopes.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  "(contains($error, 'spec.scopes[1]: Duplicate value'))": true
+    - name: Refuse a scope with whitespace
+      try:
+        - patch:
+            file: scope-with-whitespace.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.scopes[0] in body should match')): true
     - name: Refuse a resourceId Altinn would refuse
       try:
         - create:

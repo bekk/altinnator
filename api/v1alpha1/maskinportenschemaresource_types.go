@@ -77,7 +77,7 @@ type ContactPoint struct {
 	Telephone string `json:"telephone,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	ContactPage string `json:"contactpage,omitempty"`
+	ContactPage string `json:"contactPage,omitempty"`
 
 	// Category is what the contact point is, such as a customer centre.
 	//
@@ -94,15 +94,29 @@ type Keyword struct {
 	Language string `json:"language,omitempty"`
 }
 
+// MaskinportenSchemaResourceStatus defines the observed state of MaskinportenSchemaResource.
+type MaskinportenSchemaResourceStatus struct {
+	// Conditions say whether the resource in Altinn matches the spec, and why not when it doesn't.
+	//
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Resource ID",type=string,JSONPath=`.spec.resourceId`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
 
 // MaskinportenSchemaResource is a resource of type MaskinportenSchema in Altinn's Resource Registry.
 type MaskinportenSchemaResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec MaskinportenSchemaResourceSpec `json:"spec"`
+	Spec   MaskinportenSchemaResourceSpec   `json:"spec"`
+	Status MaskinportenSchemaResourceStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

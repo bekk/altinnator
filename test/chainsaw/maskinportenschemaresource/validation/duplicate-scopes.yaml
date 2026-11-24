@@ -1,0 +1,8 @@
+apiVersion: altinnator.kartverket.no/v1alpha1
+kind: MaskinportenSchemaResource
+metadata:
+  name: validation-test
+spec:
+  scopes:
+    - kartverk:validation:test
+    - kartverk:validation:test

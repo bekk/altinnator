@@ -261,7 +261,7 @@ description = "Download the binaries required for envtest into ./bin and print t
 run = '''
 k8s_version="${KUBERNETES_VERSION%.*}"
 echo "Setting up envtest binaries for Kubernetes version $k8s_version..." >&2
-setup-envtest use "$k8s_version" --bin-dir bin -p path
+setup-envtest use "$k8s_version" --bin-dir "$PWD/bin" -p path
 '''
 
 [tasks.test]
