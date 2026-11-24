@@ -15,5 +15,13 @@ images:
 configMapGenerator:
 - envs:
   - base/.env
+  literals:
+  - ALTINNATOR_LOCAL_MOCK_URL=http://host.docker.internal:8090
   name: altinnator-env
+  namespace: altinnator-system
+
+secretGenerator:
+- envs:
+  - base/maskinporten.env
+  name: altinnator-maskinporten
   namespace: altinnator-system

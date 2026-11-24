@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kartverket/altinnator/internal/altinn/auth"
 	"github.com/kartverket/altinnator/pkg/envvar"
 	"go.uber.org/zap/zapcore"
 
@@ -81,6 +82,10 @@ func main() {
 
 	if envVarsLoadErr := envvar.Load(); envVarsLoadErr != nil {
 		setupLog.Error(envVarsLoadErr, "unable to load env vars")
+		os.Exit(1)
+	}
+	if _, keyErr := auth.ParseKey(envvar.Get().MaskinportenClientJWK.Reveal()); keyErr != nil {
+		setupLog.Error(keyErr, "unable to load ALTINNATOR_MASKINPORTEN_CLIENT_JWK")
 		os.Exit(1)
 	}
 

@@ -3,6 +3,7 @@ module github.com/kartverket/altinnator
 go 1.27.3
 
 require (
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-logr/logr v1.4.4
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.34.0

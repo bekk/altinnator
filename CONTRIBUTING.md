@@ -28,13 +28,35 @@ mise run dev:run            # run the controller locally, with the pinned tools 
 
 ## Run Altinnator locally
 
+### Environment variables
+
+Altinnator reads its configuration from environment variables, from two files in `config/manager/base`:
+
+- `.env` becomes the ConfigMap `altinnator-env`. It holds the settings that are the same for everyone, and is
+  committed.
+- `maskinporten.env` becomes the Secret `altinnator-maskinporten`. It holds the Maskinporten client: the Altinn
+  environment, the client ID and the client's private key. It is gitignored. `mise run cluster:local`, which `dev:run`,
+  `deploy` and the chainsaw tasks run first, creates it from `maskinporten.example.env` when it is missing. The example
+  holds a made-up client that only the mock in [altinn-management](https://github.com/bekk/altinn-management)
+  (`./gradlew :mock-api:run`) accepts.
+
+To talk to TT02, set `ALTINNATOR_ALTINN_ENVIRONMENT=TT02`, and the client's ID and real key in
+`ALTINNATOR_MASKINPORTEN_CLIENT_ID` and `ALTINNATOR_MASKINPORTEN_CLIENT_JWK`, all in `maskinporten.env`. Never put a
+real key in `maskinporten.example.env`.
+
+With `LOCAL`, Altinnator finds the mock at `ALTINNATOR_LOCAL_MOCK_URL`, which is `http://localhost:8090` on your host.
+In kind, `localhost` is the pod itself, so `config/manager/kustomization.yaml` sets it to
+`http://host.docker.internal:8090`, Docker Desktop's name for your host.
+
 ### Run on your host machine
 
-- IDE: run the **Altinnator** configuration (runs **Setup** first, loads `config/manager/base/.env`). Stop with the stop button.
+- IDE: run the **Altinnator** configuration (runs **Setup** first, loads `config/manager/base/.env` and
+  `config/manager/base/maskinporten.env`). Stop with the stop button.
 
 > [!IMPORTANT]
 > The JetBrains [EnvFile](https://plugins.jetbrains.com/plugin/7861-envfile) plugin must be installed, otherwise the
-> environment variables from `config/manager/base/.env` are not loaded when running in the IDE.
+> environment variables from `config/manager/base/.env` and `config/manager/base/maskinporten.env` are not loaded when
+> running in the IDE.
 
 - Terminal (after installing mise, see above):
 
