@@ -22,6 +22,7 @@ const (
 	resourcePath           = "/resourceregistry/api/v1/resource"
 	maskinportenSchemaType = "MaskinportenSchema"
 	maskinportenScopeType  = "MaskinportenScope"
+	statusWithdrawn        = "Withdrawn"
 )
 
 // Altinn's rule for an identifier. Altinn gets it in the path, so it also keeps "/" and ".." out of the URL
@@ -39,6 +40,7 @@ var (
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
 	CreateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
+	WithdrawMaskinportenSchema(ctx context.Context, id string) error
 
 	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
 }
@@ -185,6 +187,44 @@ func (c *Client) SetMaskinportenSchemaPolicy(ctx context.Context, id string) err
 	return nil
 }
 
+func (c *Client) WithdrawMaskinportenSchema(ctx context.Context, id string) error {
+	if c.tokenProvider == nil {
+		return errors.New("withdrawing a resource needs an AccessTokenProvider")
+	}
+	r, err := c.getOwnedMaskinportenSchema(ctx, id)
+	if err != nil {
+		return err
+	}
+	// Altinn makes a new version even when nothing changes
+	if r.Status == statusWithdrawn && !r.Delegable && !r.Visible {
+		return nil
+	}
+
+	body, err := withdrawn(r.raw)
+	if err != nil {
+		return fmt.Errorf("building withdrawn resource %s: %w", id, err)
+	}
+	resourceURL, err := url.JoinPath(c.baseURL, resourcePath, id)
+	if err != nil {
+		return fmt.Errorf("building the URL of resource %s: %w", id, err)
+	}
+	if _, err := c.write(ctx, http.MethodPut, resourceURL, "application/json", body, http.StatusOK); err != nil {
+		return fmt.Errorf("withdrawing resource %s in Altinn: %w", id, err)
+	}
+	return nil
+}
+
+func withdrawn(raw []byte) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	fields["delegable"] = json.RawMessage("false")
+	fields["visible"] = json.RawMessage("false")
+	fields["status"] = json.RawMessage(`"` + statusWithdrawn + `"`)
+	return json.Marshal(fields)
+}
+
 // Altinn takes the policy as a file in the form field policyFile
 func policyForm(policy string) ([]byte, string, error) {
 	var body bytes.Buffer
@@ -293,8 +333,12 @@ func (c *Client) getResource(ctx context.Context, id string) (*resource, error) 
 		return nil, fmt.Errorf("getting resource %s from Altinn: %s", id, responded(response.StatusCode, answer))
 	}
 
-	var r resource
-	if err := json.NewDecoder(response.Body).Decode(&r); err != nil {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading resource %s from Altinn: %w", id, err)
+	}
+	r := resource{raw: body}
+	if err := json.Unmarshal(body, &r); err != nil {
 		return nil, fmt.Errorf("parsing resource %s from Altinn: %w", id, err)
 	}
 	return &r, nil
@@ -319,8 +363,11 @@ type resource struct {
 	Description           MultilingualText    `json:"description"`
 	RightDescription      MultilingualText    `json:"rightDescription"`
 	Status                string              `json:"status"`
+	Delegable             bool                `json:"delegable"`
+	Visible               bool                `json:"visible"`
 	ResourceReferences    []resourceReference `json:"resourceReferences"`
 	HasCompetentAuthority competentAuthority  `json:"hasCompetentAuthority"`
+	raw                   []byte
 }
 
 type resourceReference struct {

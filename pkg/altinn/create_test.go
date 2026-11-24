@@ -11,19 +11,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type createRequest struct {
-	method        string
-	path          string
-	authorization string
-	contentType   string
-	body          string
-}
-
 var _ = Describe("Client.CreateMaskinportenSchema", func() {
 	var (
 		status        int
 		answer        string
-		requests      []createRequest
+		requests      []writeRequest
 		tokenProvider *fakeTokenProvider
 		server        *httptest.Server
 		client        *altinn.Client
@@ -37,7 +29,7 @@ var _ = Describe("Client.CreateMaskinportenSchema", func() {
 		tokenProvider = &fakeTokenProvider{}
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
-			requests = append(requests, createRequest{
+			requests = append(requests, writeRequest{
 				method:        r.Method,
 				path:          r.URL.Path,
 				authorization: r.Header.Get("Authorization"),
