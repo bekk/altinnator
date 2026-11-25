@@ -38,8 +38,8 @@ var (
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(GroupVersion,
-		&AltinnResource{},
-		&AltinnResourceList{},
+		&MaskinportenSchemaResource{},
+		&MaskinportenSchemaResourceList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, GroupVersion)
