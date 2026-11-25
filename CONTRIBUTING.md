@@ -32,11 +32,11 @@ mise run dev:run            # run the controller locally, with the pinned tools 
 
 Altinnator reads its configuration from environment variables, from two files in `config/manager/base`:
 
-- `.env` becomes the ConfigMap `altinnator-env`. It holds the settings that are the same for everyone, and is
-  committed.
-- `maskinporten.env` becomes the Secret `altinnator-maskinporten`. It holds the Maskinporten client: the
-  Altinn environment, the client ID and the client's private key. It is committed, and holds a made-up client that
-  only the mock in [altinn-management](https://github.com/bekk/altinn-management) (`./gradlew :mock-api:run`) accepts.
+- `.env` becomes the ConfigMap `altinnator-env`. It holds the settings that are not secret, such as the Altinn
+  environment and the Maskinporten client ID, and is committed.
+- `maskinporten.env` becomes the Secret `altinnator-maskinporten`. It holds the Maskinporten client's private key.
+  It is committed, and holds a made-up key that only the mock in
+  [altinn-management](https://github.com/bekk/altinn-management) (`./gradlew :mock-api:run`) accepts.
   Altinnator only runs locally against the mock, never against TT02 or PROD, so never put a real key in it.
 
 With `LOCAL`, Altinnator finds the mock at `ALTINNATOR_LOCAL_MOCK_URL`, which is `http://localhost:8090` on your host.
