@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/kartverket/altinnator/internal/altinn"
+	"github.com/kartverket/altinnator/pkg/altinn"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -120,7 +120,9 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 	})
 
 	It("fails with what Altinn answered when it responds with an error", func() {
-		responses["/resourceregistry/api/v1/resource/some-resource"] = response{http.StatusForbidden, `{"title": "Forbidden"}`}
+		responses["/resourceregistry/api/v1/resource/some-resource"] = response{
+			http.StatusForbidden, `{"title": "Forbidden"}`,
+		}
 
 		_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
 
@@ -128,7 +130,9 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 	})
 
 	It("fails with only the start of a long answer from Altinn", func() {
-		responses["/resourceregistry/api/v1/resource/some-resource"] = response{http.StatusBadGateway, strings.Repeat("x", 2000)}
+		responses["/resourceregistry/api/v1/resource/some-resource"] = response{
+			http.StatusBadGateway, strings.Repeat("x", 2000),
+		}
 
 		_, err := client.GetMaskinportenSchema(context.Background(), "some-resource")
 
