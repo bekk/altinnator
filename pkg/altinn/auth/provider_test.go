@@ -241,7 +241,7 @@ var _ = Describe("Provider", func() {
 			Expect(fake.exchanges()).To(Equal([]string{"Bearer maskinporten-token-1", "Bearer maskinporten-token-2"}))
 		})
 
-		It("signs a new grant for each Maskinporten token, since Maskinporten refuses a grant it has seen", func(ctx SpecContext) {
+		It("signs a new grant per Maskinporten token, since Maskinporten refuses a grant it has seen", func(ctx SpecContext) {
 			_, err := provider.Token(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			clock.Advance(altinnLifetime)
@@ -390,7 +390,8 @@ var _ = Describe("Provider", func() {
 				cannedResponse{http.StatusUnauthorized, `{"title":"Unauthorized","status":401,"traceId":"00-abc-01"}`},
 				"the Altinn token exchange failed with HTTP 401 (traceId 00-abc-01)"),
 			Entry("with the detail and traceId from Altinn's problem details",
-				cannedResponse{http.StatusForbidden, `{"title":"Forbidden","status":403,"detail":"Missing scope","traceId":"00-def-01"}`},
+				cannedResponse{http.StatusForbidden,
+					`{"title":"Forbidden","status":403,"detail":"Missing scope","traceId":"00-def-01"}`},
 				"the Altinn token exchange failed with HTTP 403: Missing scope (traceId 00-def-01)"),
 			Entry("with only the status when the problem details have no detail or traceId",
 				cannedResponse{http.StatusUnauthorized, `{"title":"Unauthorized","status":401}`},

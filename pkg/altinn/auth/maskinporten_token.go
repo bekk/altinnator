@@ -127,13 +127,15 @@ func (c *maskinportenClient) fetch(ctx context.Context) (Token, error) {
 	if parsed.ExpiresIn == nil {
 		return Token{}, errors.New("the response from Maskinporten has no expires_in")
 	}
-	return Token{value: parsed.AccessToken, expiresAt: requestedAt.Add(time.Duration(*parsed.ExpiresIn) * time.Second)}, nil
+	expiresAt := requestedAt.Add(time.Duration(*parsed.ExpiresIn) * time.Second)
+	return Token{value: parsed.AccessToken, expiresAt: expiresAt}, nil
 }
 
 func maskinportenError(status int, body []byte) error {
 	var parsed maskinportenErrorResponse
 	if json.Unmarshal(body, &parsed) == nil && parsed.Error != "" {
-		return fmt.Errorf("the token request to Maskinporten failed with HTTP %d: %s: %s", status, parsed.Error, parsed.Description)
+		return fmt.Errorf("the token request to Maskinporten failed with HTTP %d: %s: %s",
+			status, parsed.Error, parsed.Description)
 	}
 	return fmt.Errorf("the token request to Maskinporten failed with HTTP %d", status)
 }
