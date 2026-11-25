@@ -33,10 +33,6 @@ var (
 
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
-	CreateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
-	UpdateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
-
-	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
 }
 
 type MaskinportenSchema struct {
@@ -84,6 +80,8 @@ type Client struct {
 	httpClient *http.Client
 	orgNumber  string
 }
+
+var _ ResourceRegistry = (*Client)(nil)
 
 func NewClient(baseURL string, httpClient *http.Client, orgNumber string) *Client {
 	return &Client{baseURL: baseURL, httpClient: httpClient, orgNumber: orgNumber}

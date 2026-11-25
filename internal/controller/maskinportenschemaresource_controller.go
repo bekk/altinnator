@@ -20,10 +20,18 @@ import (
 
 const readyCondition = "Ready"
 
+// registry is what the controller needs from Altinn's Resource Registry
+type registry interface {
+	GetMaskinportenSchema(ctx context.Context, id string) (*altinn.MaskinportenSchema, error)
+	CreateMaskinportenSchema(ctx context.Context, id string, content altinn.MaskinportenSchemaContent) error
+	UpdateMaskinportenSchema(ctx context.Context, id string, content altinn.MaskinportenSchemaContent) error
+	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
+}
+
 // MaskinportenSchemaResourceReconciler reconciles a MaskinportenSchemaResource object
 type MaskinportenSchemaResourceReconciler struct {
 	client.Client
-	Registry altinn.ResourceRegistry
+	Registry registry
 }
 
 // SetupWithManager sets up the controller with the Manager.
