@@ -17,6 +17,10 @@ configMapGenerator:
   - base/.env
   name: altinnator-env
   namespace: altinnator-system
+- envs:
+  - base/texas.env
+  name: altinnator-texas
+  namespace: altinnator-system
 
 secretGenerator:
 - envs:
