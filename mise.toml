@@ -142,13 +142,10 @@ run = [
 [tasks.undeploy]
 description = "Undeploy altinnator and its resources from the kind cluster."
 usage = 'flag "--ignore-not-found" help="Ignore resource not found errors during deletion"'
-run = [
-  { task = "env:local" },
-  '''
-  manifests="$(kustomize build config/manager)"
-  echo "$manifests" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
-  ''',
-]
+run = '''
+manifests="$(kustomize build config/manager)"
+echo "$manifests" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+'''
 
 # kustomize build runs outside the pipe on purpose: a failure (e.g. an invalid kustomization) aborts the task
 # instead of silently applying nothing. Same pattern in crds:uninstall and undeploy.
@@ -199,23 +196,11 @@ run = "./scripts/create-altinnator-namespace.sh"
 [tasks."cluster:local"]
 description = "Set up local development environment."
 run = [
-  { task = "env:local" },
   { task = "cluster:create" },
   { task = "cluster:namespace" },
   { task = "check:local" },
   { task = "crds:install" },
 ]
-
-# maskinporten.env is gitignored, so it can hold a real client. Its example only has the local client the mock accepts.
-[tasks."env:local"]
-description = "Create config/manager/base/maskinporten.env from its example if it is missing."
-run = '''
-env_file=config/manager/base/maskinporten.env
-if [ ! -f "$env_file" ]; then
-  cp config/manager/base/maskinporten.example.env "$env_file"
-  echo "✅ Created $env_file from its example, with the local Maskinporten client for the mock."
-fi
-'''
 
 [tasks."cluster:clean"]
 description = "Clean up local environment by deleting the kind cluster."

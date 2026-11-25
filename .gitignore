@@ -35,7 +35,6 @@ go.work.sum
 cover.out
 
 # env file
-config/manager/base/maskinporten.env
 bin/
 .idea/
 
