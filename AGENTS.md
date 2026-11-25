@@ -11,6 +11,8 @@ test and lint it.
   SKIP.
 - The spec stays close to Altinn's API. Leave out, or make optional, what a team doesn't need to set, and let
   Altinnator fill in what is the same for every resource.
+- The custom resource is the source of truth: Altinnator reads each resource from Altinn every hour and overwrites
+  changes made there. The policy is only set until the resource is ready.
 - Every `MaskinportenSchemaResource` gets the same fixed policy. Policies for `GenericAccessResource` are not decided
   yet.
 

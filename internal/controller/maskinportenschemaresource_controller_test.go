@@ -186,6 +186,42 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(registry.policies).To(BeEmpty())
 	})
 
+	DescribeTable("checks Altinn again later when the resource is in sync",
+		func(setUp func()) {
+			setUp()
+
+			result, err := reconcile()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+		},
+		Entry("after creating it", func() {}),
+		Entry("after updating it", func() {
+			markReady()
+			registry.inAltinn = sameAsSpec()
+			registry.inAltinn.Title.Nb = "Gammel tittel"
+		}),
+		Entry("when it already matches the spec", func() {
+			markReady()
+			registry.inAltinn = sameAsSpec()
+		}),
+	)
+
+	It("corrects a change made directly in Altinn on the next check", func() {
+		markReady()
+		registry.inAltinn = sameAsSpec()
+		_, err := reconcile()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(registry.updated).To(BeEmpty())
+
+		registry.inAltinn.Title.Nb = "Endret i Altinn"
+		_, err = reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(registry.updated).To(HaveLen(1))
+		Expect(registry.updated[0].content.Title.Nb).To(Equal("Matrikkel API"))
+	})
+
 	It("sets the policy when the resource matches the spec but has not been ready", func() {
 		registry.inAltinn = sameAsSpec()
 

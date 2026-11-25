@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
 	"github.com/kartverket/altinnator/pkg/altinn"
@@ -19,6 +20,9 @@ import (
 )
 
 const readyCondition = "Ready"
+
+// Changes made directly in Altinn cause no event in the cluster, so Altinn is read again this often
+const driftCheckInterval = time.Hour
 
 // registry is what the controller needs from Altinn's Resource Registry
 type registry interface {
@@ -61,7 +65,15 @@ func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, fmt.Errorf("failed to get MaskinportenSchemaResource: %w", err)
 	}
 
-	return ctrl.Result{}, r.report(ctx, resource, r.sync(ctx, resource))
+	syncErr := r.sync(ctx, resource)
+	if err := r.report(ctx, resource, syncErr); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Altinn will never take the resource as it is, and the status says why
+	if syncErr != nil {
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
 }
 
 func (r *MaskinportenSchemaResourceReconciler) sync(
