@@ -5,7 +5,11 @@ resources:
 - base/leader-election-role.yaml
 - base/leader-election-rolebinding.yaml
 - base/pdb.yaml
+- base/service.yaml
 - base/serviceaccount.yaml
+- base/webhook-certificate.yaml
+- base/webhook-issuer.yaml
+- ../webhook
 
 images:
 - name: controller

@@ -7,6 +7,7 @@ postinstall = './scripts/setup-ide.sh'
 
 [env]
 KUBERNETES_VERSION = "1.36.4"
+CERT_MANAGER_VERSION = "1.20.2"
 KIND_CLUSTER_NAME = "{{ get_env(name='KIND_CLUSTER_NAME', default='altinnator') }}"
 KUBECONTEXT = "{{ get_env(name='KUBECONTEXT', default='kind-' ~ get_env(name='KIND_CLUSTER_NAME', default='altinnator')) }}"
 # Pinned by digest so local runs and the api-docs workflow render identically.
@@ -41,7 +42,7 @@ run = [
     case "$line" in ''|'#'*) continue ;; esac
     export "$line"
   done < config/manager/base/.env
-  go run ./cmd/main.go
+  ENABLE_WEBHOOKS=false go run ./cmd/main.go
   ''',
 ]
 
@@ -115,6 +116,7 @@ run = '''
 description = "Deploy altinnator and all required resources to the kind cluster."
 run = [
   { task = "cluster:local" },
+  { task = "cluster:cert-manager" },
   { task = "docker:build" },
   '''
   if lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null; then
@@ -205,6 +207,19 @@ run = [
   { task = "crds:install" },
 ]
 
+# The webhook's certificate comes from cert-manager (see config/manager).
+[tasks."cluster:cert-manager"]
+description = "Install cert-manager in the kind cluster."
+run = '''
+if kubectl --context "$KUBECONTEXT" -n cert-manager get deployment cert-manager-webhook >/dev/null 2>&1; then
+  echo "✅ cert-manager already installed, skipping." >&2
+else
+  kubectl apply --context "$KUBECONTEXT" \
+    -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VERSION}/cert-manager.yaml"
+fi
+kubectl --context "$KUBECONTEXT" -n cert-manager wait deployment --all --for=condition=Available --timeout=120s
+'''
+
 [tasks."cluster:clean"]
 description = "Clean up local environment by deleting the kind cluster."
 run = 'kind delete cluster --name "$KIND_CLUSTER_NAME"'
@@ -238,24 +253,6 @@ run = [
   ''',
 ]
 
-[tasks."check:running-or-deployed"]
-description = "Ensure altinnator is running on host OR deployed in cluster, but not both."
-run = '''
-lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null 2>&1 && running=1 || running=0
-mise run -q check:deployed-healthy >/dev/null 2>&1 && deployed=1 || deployed=0
-if [ "$running" = "1" ] && [ "$deployed" = "1" ]; then
-  echo "❌ altinnator is both running on the host AND deployed in the cluster. Stop one before continuing."
-  exit 1
-fi
-if [ "$running" = "0" ] && [ "$deployed" = "0" ]; then
-  echo "❌ altinnator is neither running on the host nor deployed in the cluster."
-  echo "   Start it in your IDE / with 'mise run dev:run', or deploy it with 'mise run deploy'."
-  exit 1
-fi
-if [ "$running" = "1" ]; then echo "✅ altinnator is running on the host."; fi
-if [ "$deployed" = "1" ]; then echo "✅ altinnator is deployed an running in the local cluster."; fi
-'''
-
 # ---------------------------------------------------------------------------
 # Testing
 # ---------------------------------------------------------------------------
@@ -285,7 +282,7 @@ run = [
 description = "Run all chainsaw tests in parallel."
 run = [
   { task = "cluster:local" },
-  { task = "check:running-or-deployed" },
+  { task = "check:deployed-healthy" },
   "./scripts/chainsaw-test-all.sh",
 ]
 
@@ -294,6 +291,6 @@ description = "Run a specific chainsaw test, e.g. 'mise run chainsaw:test-single
 usage = 'arg "<dir>" help="Chainsaw test directory"'
 run = [
   { task = "cluster:local" },
-  { task = "check:running-or-deployed" },
+  { task = "check:deployed-healthy" },
   './scripts/chainsaw-test-single.sh -d "$usage_dir"',
 ]

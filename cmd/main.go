@@ -26,6 +26,7 @@ import (
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
 	"github.com/kartverket/altinnator/internal/controller"
+	"github.com/kartverket/altinnator/internal/webhook/maskinportenschemaresource"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -163,6 +164,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MaskinportenSchemaResource")
 		os.Exit(1)
+	}
+	// The webhook server needs a certificate, which only a cluster gives it (see config/manager)
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = maskinportenschemaresource.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MaskinportenSchemaResource")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

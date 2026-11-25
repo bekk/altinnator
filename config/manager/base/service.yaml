@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: altinnator
+  name: webhook-service
+  namespace: altinnator-system
+spec:
+  ports:
+    - name: webhook
+      port: 443
+      protocol: TCP
+      targetPort: webhook
+  selector:
+    app: altinnator

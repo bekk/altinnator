@@ -13,6 +13,9 @@ test and lint it.
   Altinnator fill in what is the same for every resource.
 - Every `MaskinportenSchemaResource` gets the same fixed policy. Policies for `GenericAccessResource` are not decided
   yet.
+- A webhook refuses a new `MaskinportenSchemaResource` whose `resourceId` another one in the cluster uses. Asking
+  Altinn whether the id is taken waits until it's decided how Altinnator knows a resource is its own, since a
+  withdrawn resource of ours still exists there.
 
 ## Altinn
 
