@@ -36,6 +36,16 @@ func (t *tokens) issueAltinn(claims map[string]any, expiresAt time.Time) string 
 	return token
 }
 
+func (t *tokens) altinnClaims(token string) map[string]any {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	existing, ok := t.altinn[token]
+	if !ok || existing.expiresAt.Before(time.Now()) {
+		return nil
+	}
+	return existing.claims
+}
+
 func unsignedJWT(claims map[string]any) string {
 	return base64URL(map[string]any{"alg": "none", "typ": "JWT"}) + "." + base64URL(claims) + "."
 }

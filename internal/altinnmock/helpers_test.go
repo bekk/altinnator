@@ -1,6 +1,7 @@
 package altinnmock_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -15,10 +16,14 @@ import (
 )
 
 const (
-	kartverket   = "971040238"
-	resourcePath = "/resourceregistry/api/v1/resource"
-	writeScope   = "altinn:resourceregistry/resource.write"
-	exchangePath = "/authentication/api/v1/exchange/maskinporten"
+	kartverket    = "971040238"
+	resourcePath  = "/resourceregistry/api/v1/resource"
+	writeScope    = "altinn:resourceregistry/resource.write"
+	adminScope    = "altinn:resourceregistry/resource.admin"
+	exchangePath  = "/authentication/api/v1/exchange/maskinporten"
+	otherOrg      = "981544315"
+	otherOrgCode  = "slf"
+	otherResource = "slf-skogtiltakws"
 )
 
 type response struct {
@@ -31,6 +36,17 @@ func (r response) json() map[string]any {
 	var body map[string]any
 	Expect(json.Unmarshal([]byte(r.body), &body)).To(Succeed(), r.body)
 	return body
+}
+
+// The messages of a validation problem, by key
+func (r response) errors() map[string][]string {
+	result := map[string][]string{}
+	for key, messages := range r.json()["errors"].(map[string]any) {
+		for _, message := range messages.([]any) {
+			result[key] = append(result[key], message.(string))
+		}
+	}
+	return result
 }
 
 func (r response) mediaType() string {
@@ -122,18 +138,53 @@ func texts(id string) map[string]any {
 	return map[string]any{"en": id + " en", "nb": id + " nb", "nn": id + " nn"}
 }
 
+type resourceOption func(map[string]any)
+
+func withScope(scope string) resourceOption {
+	return func(r map[string]any) {
+		r["resourceReferences"] = []any{
+			map[string]any{"referenceSource": "Default", "reference": scope, "referenceType": "MaskinportenScope"},
+		}
+	}
+}
+
+func ownedBy(organization, orgCode string) resourceOption {
+	return func(r map[string]any) {
+		r["hasCompetentAuthority"] = map[string]any{"organization": organization, "orgcode": orgCode}
+	}
+}
+
 // A MaskinportenSchema resource that Altinn accepts from Kartverket
-func resource(id string) map[string]any {
-	return map[string]any{
+func resource(id string, options ...resourceOption) map[string]any {
+	r := map[string]any{
 		"identifier":       id,
 		"title":            texts(id),
 		"description":      texts(id),
 		"rightDescription": texts(id),
 		"contactPoints":    []any{},
 		"resourceType":     "MaskinportenSchema",
-		"resourceReferences": []any{
-			map[string]any{"referenceSource": "Default", "reference": "kartverk:test", "referenceType": "MaskinportenScope"},
-		},
-		"hasCompetentAuthority": map[string]any{"organization": kartverket, "orgcode": "kv"},
 	}
+	withScope("kartverk:test")(r)
+	ownedBy(kartverket, "kv")(r)
+	for _, option := range options {
+		option(r)
+	}
+	return r
+}
+
+func writeJSON(method, path string, body any, token string) response {
+	raw, err := json.Marshal(body)
+	Expect(err).NotTo(HaveOccurred())
+	return send(method, path, bytes.NewReader(raw), map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+}
+
+func create(body any) response {
+	return writeJSON(http.MethodPost, resourcePath, body, altinnToken(writeScope))
+}
+
+func update(id string, body any) response {
+	return writeJSON(http.MethodPut, resourcePath+"/"+id, body, altinnToken(writeScope))
 }
