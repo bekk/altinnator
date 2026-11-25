@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
-	"github.com/kartverket/altinnator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -158,13 +157,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.MaskinportenSchemaResourceReconciler{
-		Client: mgr.GetClient(),
-		// Registry is set once Altinnator can get a token for Altinn. Until then, every reconcile fails.
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MaskinportenSchemaResource")
-		os.Exit(1)
-	}
+	// The MaskinportenSchemaResource controller is set up once Altinnator has a client for Altinn.
 	// +kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
