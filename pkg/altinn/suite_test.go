@@ -1,4 +1,4 @@
-package statusmanager_test
+package altinn_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestStatusManager(t *testing.T) {
+func TestAltinn(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "StatusManager Suite")
+	RunSpecs(t, "Altinn Suite")
 }

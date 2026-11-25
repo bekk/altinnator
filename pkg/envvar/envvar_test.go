@@ -34,36 +34,20 @@ func unsetEnv(key string) {
 
 var _ = Describe("Load", func() {
 	BeforeEach(func() {
-		setEnv("ALTINNATOR_ADDITIONAL_CONFIG_MAP_DATA", `{"extra_key": "extra_value"}`)
 		setEnv("ALTINNATOR_ALTINN_PLATFORM_BASE_URL", "https://platform.tt02.altinn.no")
 	})
 
-	It("reads the additional ConfigMap data and the Altinn platform base URL", func() {
+	It("reads the Altinn platform base URL", func() {
 		Expect(envvar.Load()).To(Succeed())
 
-		loaded := envvar.Get()
-		Expect(loaded.AdditionalConfigMapData).To(Equal(envvar.AdditionalConfigMapData{"extra_key": "extra_value"}))
-		Expect(loaded.AltinnPlatformBaseURL).To(Equal("https://platform.tt02.altinn.no"))
+		Expect(envvar.Get().AltinnPlatformBaseURL).To(Equal("https://platform.tt02.altinn.no"))
 	})
 
-	It("reports a value it cannot read, without quoting the value", func() {
-		setEnv("ALTINNATOR_ADDITIONAL_CONFIG_MAP_DATA", `{"key": secret-part}`)
+	It("requires the Altinn platform base URL", func() {
+		unsetEnv("ALTINNATOR_ALTINN_PLATFORM_BASE_URL")
 
-		err := envvar.Load()
-
-		Expect(err).To(MatchError(ContainSubstring("ALTINNATOR_ADDITIONAL_CONFIG_MAP_DATA: invalid character")))
-		Expect(err.Error()).NotTo(ContainSubstring("secret-part"))
+		Expect(envvar.Load()).To(MatchError(ContainSubstring("ALTINNATOR_ALTINN_PLATFORM_BASE_URL")))
 	})
-
-	DescribeTable("requires",
-		func(key string) {
-			unsetEnv(key)
-
-			Expect(envvar.Load()).To(MatchError(ContainSubstring(key)))
-		},
-		Entry(nil, "ALTINNATOR_ADDITIONAL_CONFIG_MAP_DATA"),
-		Entry(nil, "ALTINNATOR_ALTINN_PLATFORM_BASE_URL"),
-	)
 
 	It("refuses a blank Altinn platform base URL", func() {
 		setEnv("ALTINNATOR_ALTINN_PLATFORM_BASE_URL", "  ")

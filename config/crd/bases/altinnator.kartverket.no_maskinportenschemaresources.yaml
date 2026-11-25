@@ -1,0 +1,189 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: maskinportenschemaresources.altinnator.kartverket.no
+spec:
+  group: altinnator.kartverket.no
+  names:
+    kind: MaskinportenSchemaResource
+    listKind: MaskinportenSchemaResourceList
+    plural: maskinportenschemaresources
+    singular: maskinportenschemaresource
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.resourceId
+      name: Resource ID
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MaskinportenSchemaResource is a resource of type MaskinportenSchema
+          in Altinn's Resource Registry.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MaskinportenSchemaResourceSpec defines the desired state
+              of MaskinportenSchemaResource.
+            properties:
+              contactPoints:
+                description: ContactPoints are where to get help with the resource.
+                items:
+                  description: |-
+                    ContactPoint is a way to get help with the resource. Altinn may show contact points in service catalogues,
+                    see https://docs.altinn.studio/en/authorization/guides/resource-owner/create-resource-resource-admin/.
+                  properties:
+                    category:
+                      description: |-
+                        Category is a heading for the contact point's other fields that says what they are for,
+                        such as "User support", "Feedback" or "Chat with us".
+                      type: string
+                    contactPage:
+                      description: ContactPage is a link to a web page with contact
+                        information.
+                      maxLength: 255
+                      pattern: ^https?://[^\s/$.?#][^\s]*$
+                      type: string
+                    email:
+                      description: Email is an email address to contact.
+                      format: email
+                      type: string
+                    telephone:
+                      description: Telephone is a phone number to call.
+                      pattern: ^\+?[0-9 ()-]*[0-9][0-9 ()-]*$
+                      type: string
+                  type: object
+                type: array
+              delegationDescription:
+                description: DelegationDescription says what is given when access
+                  is delegated.
+                properties:
+                  en:
+                    description: En is the text in English.
+                    pattern: \S
+                    type: string
+                  nb:
+                    description: Nb is the text in Norwegian Bokmål.
+                    pattern: \S
+                    type: string
+                  nn:
+                    description: Nn is the text in Norwegian Nynorsk.
+                    pattern: \S
+                    type: string
+                required:
+                - en
+                - nb
+                - nn
+                type: object
+              description:
+                description: Description says what the resource is.
+                properties:
+                  en:
+                    description: En is the text in English.
+                    pattern: \S
+                    type: string
+                  nb:
+                    description: Nb is the text in Norwegian Bokmål.
+                    pattern: \S
+                    type: string
+                  nn:
+                    description: Nn is the text in Norwegian Nynorsk.
+                    pattern: \S
+                    type: string
+                required:
+                - en
+                - nb
+                - nn
+                type: object
+              homepage:
+                description: Homepage is a web page about the resource.
+                maxLength: 255
+                pattern: ^https?://[^\s/$.?#][^\s]*$
+                type: string
+              keywords:
+                description: Keywords are words to find the resource by in Altinn.
+                items:
+                  description: Keyword is a word to find the resource by in Altinn.
+                  properties:
+                    language:
+                      description: Language is the language the word is in, such as
+                        nb, nn or en.
+                      type: string
+                    word:
+                      description: Word is the keyword itself.
+                      type: string
+                  type: object
+                type: array
+              resourceId:
+                description: |-
+                  ResourceID is the resource's identifier in Altinn. It cannot be changed once applied,
+                  and it cannot start with app_ or se_, which Altinn keeps for Altinn Studio apps and Altinn 2 services.
+                pattern: ^[a-z0-9_-]{4,}$
+                type: string
+                x-kubernetes-validations:
+                - message: resourceId cannot be changed
+                  rule: self == oldSelf
+                - message: resourceId cannot start with app_ or se_ as these prefixes
+                    are used by Altinn Studio apps and Altinn 2 services
+                  rule: '!self.startsWith(''app_'') && !self.startsWith(''se_'')'
+              scopes:
+                description: Scopes are the Maskinporten scopes the resource gives
+                  access to. No OAuth scope can contain whitespace.
+                items:
+                  pattern: ^\S+$
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: set
+              title:
+                description: Title is the resource's name in Altinn.
+                properties:
+                  en:
+                    description: En is the text in English.
+                    pattern: \S
+                    type: string
+                  nb:
+                    description: Nb is the text in Norwegian Bokmål.
+                    pattern: \S
+                    type: string
+                  nn:
+                    description: Nn is the text in Norwegian Nynorsk.
+                    pattern: \S
+                    type: string
+                required:
+                - en
+                - nb
+                - nn
+                type: object
+            required:
+            - delegationDescription
+            - description
+            - resourceId
+            - scopes
+            - title
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}

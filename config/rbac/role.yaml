@@ -5,47 +5,10 @@ metadata:
   name: altinnator
 rules:
 - apiGroups:
-  - ""
+  - altinnator.kartverket.no
   resources:
-  - configmaps
+  - maskinportenschemaresources
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - altinnator.kartverket.no
-  resources:
-  - altinnresources
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - altinnator.kartverket.no
-  resources:
-  - altinnresources/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - altinnator.kartverket.no
-  resources:
-  - altinnresources/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - events.k8s.io
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
