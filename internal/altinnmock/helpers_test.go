@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -187,4 +188,20 @@ func create(body any) response {
 
 func update(id string, body any) response {
 	return writeJSON(http.MethodPut, resourcePath+"/"+id, body, altinnToken(writeScope))
+}
+
+func uploadPolicy(method, id string, policy *string, token string) response {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	if policy != nil {
+		file, err := form.CreateFormFile("policyFile", "policy.xml")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = file.Write([]byte(*policy))
+		Expect(err).NotTo(HaveOccurred())
+	}
+	Expect(form.Close()).To(Succeed())
+	return send(method, resourcePath+"/"+id+"/policy", &body, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  form.FormDataContentType(),
+	})
 }
