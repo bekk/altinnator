@@ -6,14 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
-	"github.com/go-jose/go-jose/v4/jwt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -47,44 +44,51 @@ type cannedResponse struct {
 	body   string
 }
 
-// fakeAltinn plays Maskinporten's token endpoint and Altinn's token exchange, and records the requests to them. Like
-// the mock in altinn-management, its Altinn tokens are JWTs without a signature. A canned response replaces a token.
+// texasRequest is a token request to Texas, as the fake received it.
+type texasRequest struct {
+	contentType string
+	body        map[string]any
+}
+
+// fakeAltinn plays Texas's token endpoint and Altinn's token exchange, and records the requests to them. Its Texas
+// gives a new Maskinporten token per request. Like the mock in altinn-management, its Altinn tokens are JWTs without a
+// signature. A canned response replaces a token.
 type fakeAltinn struct {
 	server *httptest.Server
 	clock  *fakeClock
 
 	mu                     sync.Mutex
-	grantForms             []url.Values
+	texasRequests          []texasRequest
 	exchangeAuthorizations []string
 	altinnTokens           []string
-	altinnLifetime         time.Duration
-	maskinportenAnswer     *cannedResponse
+	texasAnswer            *cannedResponse
 	exchangeAnswer         *cannedResponse
 	exchangeHangs          atomic.Bool
 }
 
 func newFakeAltinn(clock *fakeClock) *fakeAltinn {
-	fake := &fakeAltinn{clock: clock, altinnLifetime: altinnLifetime}
+	fake := &fakeAltinn{clock: clock}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /token", fake.serveMaskinporten)
+	mux.HandleFunc("POST /api/v1/token", fake.serveTexas)
 	mux.HandleFunc("GET "+exchangePath, fake.serveExchange)
 	fake.server = httptest.NewServer(mux)
 	return fake
 }
 
-func (f *fakeAltinn) serveMaskinporten(w http.ResponseWriter, r *http.Request) {
+func (f *fakeAltinn) serveTexas(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	_ = r.ParseForm()
-	f.grantForms = append(f.grantForms, r.PostForm)
-	if f.maskinportenAnswer != nil {
-		w.WriteHeader(f.maskinportenAnswer.status)
-		_, _ = w.Write([]byte(f.maskinportenAnswer.body))
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	f.texasRequests = append(f.texasRequests, texasRequest{contentType: r.Header.Get("Content-Type"), body: body})
+	if f.texasAnswer != nil {
+		w.WriteHeader(f.texasAnswer.status)
+		_, _ = w.Write([]byte(f.texasAnswer.body))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"access_token": fmt.Sprintf("maskinporten-token-%d", len(f.grantForms)),
+		"access_token": fmt.Sprintf("maskinporten-token-%d", len(f.texasRequests)),
 		"token_type":   "Bearer",
 		"expires_in":   int64(maskinportenLifetime / time.Second),
 	})
@@ -104,16 +108,26 @@ func (f *fakeAltinn) serveExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := unsignedJWT(fmt.Sprintf(`{"jti":"altinn-token-%d","exp":%d}`,
-		len(f.exchangeAuthorizations), f.clock.Now().Add(f.altinnLifetime).Unix()))
+		len(f.exchangeAuthorizations), f.clock.Now().Add(altinnLifetime).Unix()))
 	f.altinnTokens = append(f.altinnTokens, token)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(token))
 }
 
-func (f *fakeAltinn) grants() []url.Values {
+func (f *fakeAltinn) texas() []texasRequest {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Clone(f.grantForms)
+	return slices.Clone(f.texasRequests)
+}
+
+// skippedCache tells, per request to Texas, whether it asked Texas to skip its cache.
+func (f *fakeAltinn) skippedCache() []bool {
+	requests := f.texas()
+	skipped := make([]bool, 0, len(requests))
+	for _, request := range requests {
+		skipped = append(skipped, request.body["skip_cache"] == true)
+	}
+	return skipped
 }
 
 func (f *fakeAltinn) exchanges() []string {
@@ -128,17 +142,11 @@ func (f *fakeAltinn) issuedAltinnTokens() []string {
 	return slices.Clone(f.altinnTokens)
 }
 
-func (f *fakeAltinn) setAltinnLifetime(lifetime time.Duration) {
+// answer makes Texas and the exchange answer with the canned responses. nil gives a token again.
+func (f *fakeAltinn) answer(texas, exchange *cannedResponse) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.altinnLifetime = lifetime
-}
-
-// answer makes Maskinporten and the exchange answer with the canned responses. nil gives a token again.
-func (f *fakeAltinn) answer(maskinporten, exchange *cannedResponse) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.maskinportenAnswer = maskinporten
+	f.texasAnswer = texas
 	f.exchangeAnswer = exchange
 }
 
@@ -146,17 +154,6 @@ func (f *fakeAltinn) answer(maskinporten, exchange *cannedResponse) {
 func unsignedJWT(payload string) string {
 	encode := base64.RawURLEncoding.EncodeToString
 	return encode([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + encode([]byte(payload)) + "."
-}
-
-// verifiedGrant checks that the test key signed the grant, and gives its kid, its claims, and its raw claims.
-func verifiedGrant(assertion string) (string, grantClaims, map[string]any) {
-	parsed, err := jwt.ParseSigned(assertion, []jose.SignatureAlgorithm{jose.RS256})
-	Expect(err).NotTo(HaveOccurred())
-	var claims grantClaims
-	Expect(parsed.Claims(&privateKey.PublicKey, &claims)).To(Succeed())
-	var raw map[string]any
-	Expect(parsed.UnsafeClaimsWithoutVerification(&raw)).To(Succeed())
-	return parsed.Headers[0].KeyID, claims, raw
 }
 
 var _ = Describe("Provider", func() {
@@ -171,24 +168,10 @@ var _ = Describe("Provider", func() {
 		fake = newFakeAltinn(clock)
 		DeferCleanup(fake.server.Close)
 
-		key, err := ParseKey(jwkOf(privateKey, testKeyID))
-		Expect(err).NotTo(HaveOccurred())
-		provider, err = newProvider(Config{
-			MaskinportenTokenURL: fake.server.URL + "/token",
-			PlatformBaseURL:      fake.server.URL,
-			ClientID:             "test-client",
-			Key:                  key,
+		provider = newProvider(Config{
+			TexasTokenURL:   fake.server.URL + "/api/v1/token",
+			PlatformBaseURL: fake.server.URL,
 		}, fake.server.Client(), clock.Now)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	It("refuses a Maskinporten token URL that is not absolute", func() {
-		key, err := ParseKey(jwkOf(privateKey, testKeyID))
-		Expect(err).NotTo(HaveOccurred())
-
-		_, err = NewProvider(Config{MaskinportenTokenURL: "/token", Key: key}, http.DefaultClient)
-
-		Expect(err).To(MatchError(`the Maskinporten token URL "/token" is not an absolute URL`))
 	})
 
 	Describe("getting a token", func() {
@@ -201,22 +184,17 @@ var _ = Describe("Provider", func() {
 			Expect(token.expiresAt).To(BeTemporally("==", clock.Now().Add(altinnLifetime)))
 		})
 
-		It("asks Maskinporten for the resource write scope with a grant the key signs", func(ctx SpecContext) {
+		It("asks Texas for a Maskinporten token with the resource write scope", func(ctx SpecContext) {
 			_, err := provider.Token(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(fake.grants()).To(HaveLen(1))
-			form := fake.grants()[0]
-			Expect(form.Get("grant_type")).To(Equal("urn:ietf:params:oauth:grant-type:jwt-bearer"))
-			kid, claims, raw := verifiedGrant(form.Get("assertion"))
-			Expect(kid).To(Equal(testKeyID))
-			Expect(claims.Issuer).To(Equal("test-client"))
-			Expect(claims.Scope).To(Equal(ResourceWriteScope))
-			Expect(claims.ID).NotTo(BeEmpty())
-			Expect(claims.IssuedAt.Time()).To(BeTemporally("==", clock.Now()))
-			Expect(claims.Expiry.Time()).To(BeTemporally("==", clock.Now().Add(60*time.Second)))
-			// A string and not a list, since the mock and Maskinporten want one audience: Maskinporten's issuer
-			Expect(raw).To(HaveKeyWithValue("aud", fake.server.URL+"/"))
+			Expect(fake.texas()).To(Equal([]texasRequest{{
+				contentType: "application/json",
+				body: map[string]any{
+					"identity_provider": "maskinporten",
+					"target":            "altinn:resourceregistry/resource.write",
+				},
+			}}))
 		})
 	})
 
@@ -229,7 +207,7 @@ var _ = Describe("Provider", func() {
 			again, err := provider.Token(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(again).To(Equal(first))
-			Expect(fake.grants()).To(HaveLen(1))
+			Expect(fake.texas()).To(HaveLen(1))
 			Expect(fake.exchanges()).To(HaveLen(1))
 
 			clock.Advance(time.Second)
@@ -237,35 +215,9 @@ var _ = Describe("Provider", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(renewed.Reveal()).NotTo(Equal(first.Reveal()))
 			Expect(renewed.expiresAt).To(BeTemporally("==", clock.Now().Add(altinnLifetime)))
-			// The Maskinporten token expired long before, so it was renewed too
+			// Texas decides whether the Maskinporten token can be reused, so the renewal lets Texas use its cache
+			Expect(fake.skippedCache()).To(Equal([]bool{false, false}))
 			Expect(fake.exchanges()).To(Equal([]string{"Bearer maskinporten-token-1", "Bearer maskinporten-token-2"}))
-		})
-
-		It("signs a new grant per Maskinporten token, since Maskinporten refuses a grant it has seen", func(ctx SpecContext) {
-			_, err := provider.Token(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			clock.Advance(altinnLifetime)
-			_, err = provider.Token(ctx)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(fake.grants()).To(HaveLen(2))
-			_, first, _ := verifiedGrant(fake.grants()[0].Get("assertion"))
-			_, second, _ := verifiedGrant(fake.grants()[1].Get("assertion"))
-			Expect(second.ID).NotTo(Equal(first.ID))
-		})
-
-		It("trades the cached Maskinporten token for a new Altinn token while it lasts", func(ctx SpecContext) {
-			fake.setAltinnLifetime(time.Minute)
-			first, err := provider.Token(ctx)
-			Expect(err).NotTo(HaveOccurred())
-
-			clock.Advance(time.Minute - refreshLeeway)
-			renewed, err := provider.Token(ctx)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(renewed.Reveal()).NotTo(Equal(first.Reveal()))
-			Expect(fake.grants()).To(HaveLen(1))
-			Expect(fake.exchanges()).To(Equal([]string{"Bearer maskinporten-token-1", "Bearer maskinporten-token-1"}))
 		})
 
 		It("gets one token for callers at the same time", func(ctx SpecContext) {
@@ -282,7 +234,7 @@ var _ = Describe("Provider", func() {
 			callers.Wait()
 
 			Expect(tokens).To(HaveEach(Equal(tokens[0])))
-			Expect(fake.grants()).To(HaveLen(1))
+			Expect(fake.texas()).To(HaveLen(1))
 			Expect(fake.exchanges()).To(HaveLen(1))
 		})
 
@@ -303,7 +255,7 @@ var _ = Describe("Provider", func() {
 	})
 
 	Describe("when Altinn answers 401", func() {
-		It("gets a new Altinn token with the cached Maskinporten token", func(ctx SpecContext) {
+		It("gets a new Altinn token, and lets Texas use its cached Maskinporten token", func(ctx SpecContext) {
 			refused, err := provider.Token(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -312,7 +264,7 @@ var _ = Describe("Provider", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(renewed.Reveal()).NotTo(Equal(refused.Reveal()))
-			Expect(fake.grants()).To(HaveLen(1))
+			Expect(fake.skippedCache()).To(Equal([]bool{false, false}))
 			Expect(fake.exchanges()).To(HaveLen(2))
 		})
 
@@ -333,23 +285,42 @@ var _ = Describe("Provider", func() {
 	})
 
 	Describe("when the Altinn token exchange fails", func() {
-		It("gets a new Maskinporten token for the next try", func(ctx SpecContext) {
+		It("asks Texas for a new Maskinporten token for the next try, and only that one", func(ctx SpecContext) {
 			fake.answer(nil, &cannedResponse{http.StatusUnauthorized, `{"title":"Unauthorized","status":401}`})
 			_, err := provider.Token(ctx)
 			Expect(err).To(HaveOccurred())
 
 			fake.answer(nil, nil)
 			_, err = provider.Token(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			clock.Advance(altinnLifetime)
+			_, err = provider.Token(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fake.skippedCache()).To(Equal([]bool{false, true, false}))
+			Expect(fake.exchanges()).To(Equal([]string{
+				"Bearer maskinporten-token-1", "Bearer maskinporten-token-2", "Bearer maskinporten-token-3"}))
+		})
+
+		It("keeps asking Texas for a new Maskinporten token when Texas fails", func(ctx SpecContext) {
+			fake.answer(nil, &cannedResponse{http.StatusUnauthorized, `{"title":"Unauthorized","status":401}`})
+			_, err := provider.Token(ctx)
+			Expect(err).To(HaveOccurred())
+			fake.answer(&cannedResponse{http.StatusInternalServerError, ""}, nil)
+			_, err = provider.Token(ctx)
+			Expect(err).To(HaveOccurred())
+
+			fake.answer(nil, nil)
+			_, err = provider.Token(ctx)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(fake.grants()).To(HaveLen(2))
-			Expect(fake.exchanges()).To(Equal([]string{"Bearer maskinporten-token-1", "Bearer maskinporten-token-2"}))
+			Expect(fake.skippedCache()).To(Equal([]bool{false, true, true}))
 		})
 	})
 
 	Describe("errors", func() {
 		// The messages are matched in full, so they cannot quote a token
-		DescribeTable("reports a failed token request to Maskinporten",
+		DescribeTable("reports a failed token request to Texas",
 			func(ctx SpecContext, answer cannedResponse, message string) {
 				fake.answer(&answer, nil)
 
@@ -358,24 +329,25 @@ var _ = Describe("Provider", func() {
 				Expect(err).To(MatchError(message))
 				Expect(fake.exchanges()).To(BeEmpty())
 			},
-			Entry("with Maskinporten's OAuth error",
-				cannedResponse{http.StatusBadRequest, `{"error":"invalid_grant","error_description":"Invalid assertion"}`},
-				"the token request to Maskinporten failed with HTTP 400: invalid_grant: Invalid assertion"),
+			Entry("with the OAuth error from Texas",
+				cannedResponse{http.StatusInternalServerError,
+					`{"error":"invalid_client","error_description":"Client authentication failed"}`},
+				"the token request to Texas failed with HTTP 500: invalid_client: Client authentication failed"),
 			Entry("with only the status when the body is not an OAuth error",
 				cannedResponse{http.StatusServiceUnavailable, `<html>secret-token</html>`},
-				"the token request to Maskinporten failed with HTTP 503"),
+				"the token request to Texas failed with HTTP 503"),
 			Entry("when the body is not JSON",
 				cannedResponse{http.StatusOK, `secret-token`},
-				"the response from Maskinporten is not JSON"),
+				"the response from Texas is not JSON"),
 			Entry("when there is no access_token",
 				cannedResponse{http.StatusOK, `{"expires_in":120}`},
-				"the response from Maskinporten has no access_token"),
+				"the response from Texas has no access_token"),
 			Entry("when the access_token cannot go in an Authorization header",
 				cannedResponse{http.StatusOK, `{"access_token":"secret token","expires_in":120}`},
-				"the access_token from Maskinporten is not a valid bearer token"),
+				"the access_token from Texas is not a valid bearer token"),
 			Entry("when there is no expires_in",
 				cannedResponse{http.StatusOK, `{"access_token":"secret-token"}`},
-				"the response from Maskinporten has no expires_in"),
+				"the response from Texas has no expires_in"),
 		)
 
 		DescribeTable("reports a failed Altinn token exchange",
@@ -422,12 +394,12 @@ var _ = Describe("Provider", func() {
 				"the Altinn token has no exp claim"),
 		)
 
-		It("reports that Maskinporten cannot be reached", func(ctx SpecContext) {
+		It("reports that Texas cannot be reached", func(ctx SpecContext) {
 			fake.server.Close()
 
 			_, err := provider.Token(ctx)
 
-			Expect(err).To(MatchError(ContainSubstring("calling Maskinporten")))
+			Expect(err).To(MatchError(ContainSubstring("calling Texas")))
 		})
 
 		It("does not keep a failure, so the next call tries again", func(ctx SpecContext) {
@@ -440,7 +412,7 @@ var _ = Describe("Provider", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token.Reveal()).To(Equal(fake.issuedAltinnTokens()[0]))
-			Expect(fake.grants()).To(HaveLen(2))
+			Expect(fake.texas()).To(HaveLen(2))
 			Expect(fake.exchanges()).To(HaveLen(1))
 		})
 	})

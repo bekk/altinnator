@@ -30,28 +30,26 @@ mise run dev:run            # run the controller locally, with the pinned tools 
 
 ### Environment variables
 
-Altinnator reads its configuration from environment variables, from two files in `config/manager/base`:
+Altinnator gets its Maskinporten tokens from [Texas](https://github.com/nais/texas), which runs next to it in its pod
+and answers on `http://localhost:3000/api/v1/token`. Texas holds the Maskinporten client and its key, so Altinnator
+never sees the key. Two files in `config/manager/base` hold the configuration:
 
-- `.env` becomes the ConfigMap `altinnator-env`. It holds the settings that are not secret, such as the Altinn
-  environment and the Maskinporten client ID, and is committed.
-- `maskinporten.env` becomes the Secret `altinnator-maskinporten`. It holds the Maskinporten client's private key.
-  It is committed, and holds a made-up key that only the mock in
-  [altinn-management](https://github.com/bekk/altinn-management) (`./gradlew :mock-api:run`) accepts.
-  Altinnator only runs locally against the mock, never against TT02 or PROD, so never put a real key in it.
-
-With `LOCAL`, Altinnator finds the mock at `ALTINNATOR_LOCAL_MOCK_URL`, which is `http://localhost:8090` on your host.
-In kind, `localhost` is the pod itself, so `config/manager/kustomization.yaml` sets it to
-`http://host.docker.internal:8090`, Docker Desktop's name for your host.
+- `.env` becomes the ConfigMap `altinnator-env`, Altinnator's configuration. `ALTINNATOR_ALTINN_PLATFORM_BASE_URL`
+  is where Altinnator reaches Altinn: the mock in [altinn-management](https://github.com/bekk/altinn-management)
+  (`./gradlew :mock-api:run`) on `http://localhost:8090`. In kind, `localhost` is the pod itself, so
+  `deployment.yaml` sets it to `http://host.docker.internal:8090`, Docker Desktop's name for your host.
+- `maskinporten.env` becomes the Secret `altinnator-maskinporten`, which only Texas reads. It holds the Maskinporten
+  client. It is committed, and holds a made-up key that only the mock accepts. Altinnator only runs locally against
+  the mock, never against TT02 or PROD, so never put a real key in it.
 
 ### Run on your host machine
 
-- IDE: run the **Altinnator** configuration (runs **Setup** first, loads `config/manager/base/.env` and
-  `config/manager/base/maskinporten.env`). Stop with the stop button.
+- IDE: run the **Altinnator** configuration (runs **Setup** first, loads `config/manager/base/.env`). Stop with the
+  stop button.
 
 > [!IMPORTANT]
 > The JetBrains [EnvFile](https://plugins.jetbrains.com/plugin/7861-envfile) plugin must be installed, otherwise the
-> environment variables from `config/manager/base/.env` and `config/manager/base/maskinporten.env` are not loaded when
-> running in the IDE.
+> environment variables from `config/manager/base/.env` are not loaded when running in the IDE.
 
 - Terminal (after installing mise, see above):
 

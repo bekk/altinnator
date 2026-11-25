@@ -37,12 +37,10 @@ run = [
   { task = "check:not-deployed" },
   '''
   # Not sourced as shell: values are taken literally, as kustomize does for the cluster.
-  for env_file in config/manager/base/.env config/manager/base/maskinporten.env; do
-    while IFS= read -r line || [ -n "$line" ]; do
-      case "$line" in ''|'#'*) continue ;; esac
-      export "$line"
-    done < "$env_file"
-  done
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    export "$line"
+  done < config/manager/base/.env
   go run ./cmd/main.go
   ''',
 ]
