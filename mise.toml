@@ -153,10 +153,11 @@ run = [
   { task = "generate" },
   '''
   crds="$(kustomize build config/crd)"
-  # kubectl refuses empty input, and config/crd is empty while altinnator has no CRDs.
-  if [ -n "$crds" ]; then
-    echo "$crds" | kubectl apply --context "$KUBECONTEXT" -f -
+  if [ -z "$crds" ]; then
+    echo "config/crd built no CRDs" >&2
+    exit 1
   fi
+  echo "$crds" | kubectl apply --context "$KUBECONTEXT" -f -
   rbac="$(kustomize build config/rbac)"
   echo "$rbac" | kubectl apply --context "$KUBECONTEXT" -f -
   ''',
@@ -169,9 +170,11 @@ run = [
   { task = "generate" },
   '''
   crds="$(kustomize build config/crd)"
-  if [ -n "$crds" ]; then
-    echo "$crds" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
+  if [ -z "$crds" ]; then
+    echo "config/crd built no CRDs" >&2
+    exit 1
   fi
+  echo "$crds" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
   rbac="$(kustomize build config/rbac)"
   echo "$rbac" | kubectl delete --context "$KUBECONTEXT" --ignore-not-found="${usage_ignore_not_found:-false}" -f -
   ''',

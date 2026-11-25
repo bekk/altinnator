@@ -35,6 +35,8 @@ func validSpec() map[string]any {
 		"homepage":   "https://example.no/validation-test",
 		"contactPoints": []any{
 			map[string]any{"email": "test@example.no", "category": "Test e-post"},
+			map[string]any{"telephone": "+47 (0) 22-00 00 00", "category": "Test telefon"},
+			map[string]any{"contactPage": "https://example.no/kontakt", "category": "Test kontaktside"},
 		},
 		"keywords": []any{
 			map[string]any{"word": "test", "language": "en"},
@@ -49,6 +51,10 @@ func newResource(spec map[string]any) *unstructured.Unstructured {
 	resource.SetName("validation-test")
 	resource.SetNamespace(namespace)
 	return resource
+}
+
+func contactPoint(spec map[string]any, index int) map[string]any {
+	return spec["contactPoints"].([]any)[index].(map[string]any)
 }
 
 func expectInvalid(err error, message string) {
@@ -108,6 +114,29 @@ var _ = Describe("MaskinportenSchemaResource CRD", func() {
 		Entry("a resourceId with the se_ prefix Altinn keeps for Altinn 2 services",
 			func(spec map[string]any) { spec["resourceId"] = "se_kv-api" },
 			"resourceId cannot start with app_ or se_"),
+	)
+
+	DescribeTable("refuses a malformed URL, email address or phone number",
+		func(change func(spec map[string]any), message string) {
+			spec := validSpec()
+			change(spec)
+			expectInvalid(k8sClient.Create(ctx, newResource(spec)), message)
+		},
+		Entry("a homepage that is not an http(s) URL",
+			func(spec map[string]any) { spec["homepage"] = "example.no" },
+			"spec.homepage in body should match"),
+		Entry("a contactPage that is not an http(s) URL",
+			func(spec map[string]any) { contactPoint(spec, 2)["contactPage"] = "ftp://example.no/kontakt" },
+			"spec.contactPoints[2].contactPage in body should match"),
+		Entry("an email that is not an email address",
+			func(spec map[string]any) { contactPoint(spec, 0)["email"] = "kundesenter" },
+			"spec.contactPoints[0].email in body must be of type email"),
+		Entry("a telephone with letters",
+			func(spec map[string]any) { contactPoint(spec, 1)["telephone"] = "call us" },
+			"spec.contactPoints[1].telephone in body should match"),
+		Entry("a telephone without digits",
+			func(spec map[string]any) { contactPoint(spec, 1)["telephone"] = "+" },
+			"spec.contactPoints[1].telephone in body should match"),
 	)
 
 	Context("when the resource exists", func() {

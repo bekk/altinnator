@@ -29,19 +29,19 @@ type MaskinportenSchemaResourceSpec struct {
 	// +kubebuilder:validation:Required
 	Description MultilingualText `json:"description"`
 
-	// ResourceID is the resource's identifier in Altinn. It cannot be changed,
+	// ResourceID is the resource's identifier in Altinn. It cannot be changed once applied,
 	// and it cannot start with app_ or se_, which Altinn keeps for Altinn Studio apps and Altinn 2 services.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^[a-z0-9_-]{4,}$`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="resourceId cannot be changed"
-	// +kubebuilder:validation:XValidation:rule="!self.startsWith('app_') && !self.startsWith('se_')",message="resourceId cannot start with app_ or se_"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('app_') && !self.startsWith('se_')",message="resourceId cannot start with app_ or se_ as these prefixes are used by Altinn Studio apps and Altinn 2 services"
 	ResourceID string `json:"resourceId"`
 
 	// Homepage is a web page about the resource.
 	//
 	// +kubebuilder:validation:Optional
-	Homepage string `json:"homepage,omitempty"`
+	Homepage URL `json:"homepage,omitempty"`
 
 	// ContactPoints are where to get help with the resource.
 	//
@@ -57,31 +57,45 @@ type MaskinportenSchemaResourceSpec struct {
 // MultilingualText is a text in the three languages Altinn requires.
 // Altinn counts a text that is only whitespace as missing.
 type MultilingualText struct {
+	// En is the text in English.
+	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`\S`
 	En string `json:"en"`
 
+	// Nb is the text in Norwegian Bokmål.
+	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`\S`
 	Nb string `json:"nb"`
 
+	// Nn is the text in Norwegian Nynorsk.
+	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`\S`
 	Nn string `json:"nn"`
 }
 
-// ContactPoint is a way to get help with the resource.
+// ContactPoint is a way to get help with the resource. Altinn may show contact points in service catalogues,
+// see https://docs.altinn.studio/en/authorization/guides/resource-owner/create-resource-resource-admin/.
 type ContactPoint struct {
+	// Email is an email address to contact.
+	//
 	// +kubebuilder:validation:Optional
-	Email string `json:"email,omitempty"`
+	Email Email `json:"email,omitempty"`
 
+	// Telephone is a phone number to call.
+	//
 	// +kubebuilder:validation:Optional
-	Telephone string `json:"telephone,omitempty"`
+	Telephone PhoneNumber `json:"telephone,omitempty"`
 
+	// ContactPage is a link to a web page with contact information.
+	//
 	// +kubebuilder:validation:Optional
-	ContactPage string `json:"contactPage,omitempty"`
+	ContactPage URL `json:"contactPage,omitempty"`
 
-	// Category is what the contact point is, such as a customer centre.
+	// Category is a heading for the contact point's other fields that says what they are for,
+	// such as "User support", "Feedback" or "Chat with us".
 	//
 	// +kubebuilder:validation:Optional
 	Category string `json:"category,omitempty"`
@@ -89,12 +103,33 @@ type ContactPoint struct {
 
 // Keyword is a word to find the resource by in Altinn.
 type Keyword struct {
+	// Word is the keyword itself.
+	//
 	// +kubebuilder:validation:Optional
 	Word string `json:"word,omitempty"`
 
+	// Language is the language the word is in, such as nb, nn or en.
+	//
 	// +kubebuilder:validation:Optional
 	Language string `json:"language,omitempty"`
 }
+
+// URL is an absolute http(s) URL.
+//
+// +kubebuilder:validation:MaxLength=255
+// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#][^\s]*$`
+type URL string
+
+// Email is an email address.
+//
+// +kubebuilder:validation:Format=email
+type Email string
+
+// PhoneNumber is a phone number of digits, optionally starting with +, which may be grouped with spaces,
+// hyphens and parentheses.
+//
+// +kubebuilder:validation:Pattern=`^\+?[0-9 ()-]*[0-9][0-9 ()-]*$`
+type PhoneNumber string
 
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Resource ID",type=string,JSONPath=`.spec.resourceId`
