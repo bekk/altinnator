@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kartverket/altinnator/internal/altinn/auth"
+	"github.com/kartverket/altinnator/pkg/altinn/auth"
 	"github.com/kartverket/altinnator/pkg/envvar"
 	"go.uber.org/zap/zapcore"
 
