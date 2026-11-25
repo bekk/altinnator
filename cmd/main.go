@@ -160,6 +160,7 @@ func main() {
 
 	if err = (&controller.MaskinportenSchemaResourceReconciler{
 		Client: mgr.GetClient(),
+		// Registry is set once Altinnator can get a token for Altinn. Until then, every reconcile fails.
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MaskinportenSchemaResource")
 		os.Exit(1)

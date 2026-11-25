@@ -28,10 +28,15 @@ var fixedRoutes = []string{"resourcelist", "export", "search", "updated", "chang
 var (
 	ErrNotFound = errors.New("not found in Altinn")
 	ErrTaken    = errors.New("taken by another resource in Altinn")
+	ErrRejected = errors.New("rejected by Altinn")
 )
 
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
+	CreateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
+	UpdateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
+
+	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
 }
 
 type MaskinportenSchema struct {
@@ -40,7 +45,20 @@ type MaskinportenSchema struct {
 	Title                 MultilingualText
 	Description           MultilingualText
 	DelegationDescription MultilingualText
+	Homepage              string
+	ContactPoints         []ContactPoint
+	Keywords              []Keyword
 	Status                string
+}
+
+type MaskinportenSchemaContent struct {
+	Scopes                []string
+	Title                 MultilingualText
+	Description           MultilingualText
+	DelegationDescription MultilingualText
+	Homepage              string
+	ContactPoints         []ContactPoint
+	Keywords              []Keyword
 }
 
 type MultilingualText struct {
@@ -49,13 +67,23 @@ type MultilingualText struct {
 	Nn string `json:"nn"`
 }
 
+type ContactPoint struct {
+	Category    string `json:"category"`
+	Email       string `json:"email"`
+	Telephone   string `json:"telephone"`
+	ContactPage string `json:"contactPage"`
+}
+
+type Keyword struct {
+	Word     string `json:"word"`
+	Language string `json:"language"`
+}
+
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	orgNumber  string
 }
-
-var _ ResourceRegistry = (*Client)(nil)
 
 func NewClient(baseURL string, httpClient *http.Client, orgNumber string) *Client {
 	return &Client{baseURL: baseURL, httpClient: httpClient, orgNumber: orgNumber}
@@ -128,6 +156,9 @@ type resource struct {
 	Title                 MultilingualText    `json:"title"`
 	Description           MultilingualText    `json:"description"`
 	RightDescription      MultilingualText    `json:"rightDescription"`
+	Homepage              string              `json:"homepage"`
+	ContactPoints         []ContactPoint      `json:"contactPoints"`
+	Keywords              []Keyword           `json:"keywords"`
 	Status                string              `json:"status"`
 	ResourceReferences    []resourceReference `json:"resourceReferences"`
 	HasCompetentAuthority competentAuthority  `json:"hasCompetentAuthority"`
@@ -155,6 +186,9 @@ func (r *resource) toMaskinportenSchema(id string) *MaskinportenSchema {
 		Title:                 r.Title,
 		Description:           r.Description,
 		DelegationDescription: r.RightDescription,
+		Homepage:              r.Homepage,
+		ContactPoints:         r.ContactPoints,
+		Keywords:              r.Keywords,
 		Status:                r.Status,
 	}
 }

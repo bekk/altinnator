@@ -131,15 +131,29 @@ type Email string
 // +kubebuilder:validation:Pattern=`^\+?[0-9 ()-]*[0-9][0-9 ()-]*$`
 type PhoneNumber string
 
+// MaskinportenSchemaResourceStatus defines the observed state of MaskinportenSchemaResource.
+type MaskinportenSchemaResourceStatus struct {
+	// Conditions say whether the resource in Altinn matches the spec, and why not when it doesn't.
+	//
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Resource ID",type=string,JSONPath=`.spec.resourceId`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
 
 // MaskinportenSchemaResource is a resource of type MaskinportenSchema in Altinn's Resource Registry.
 type MaskinportenSchemaResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec MaskinportenSchemaResourceSpec `json:"spec"`
+	Spec   MaskinportenSchemaResourceSpec   `json:"spec"`
+	Status MaskinportenSchemaResourceStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

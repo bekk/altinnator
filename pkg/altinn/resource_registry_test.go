@@ -16,6 +16,9 @@ const matrikkelBrukernavn = `{
   "title": {"en": "Cadastre API", "nb": "Matrikkel API", "nn": "Matrikkel API"},
   "description": {"en": "The Cadastre", "nb": "Matrikkelen", "nn": "Matrikkelen"},
   "rightDescription": {"en": "Allows", "nb": "Gir", "nn": "Gir"},
+  "homepage": "https://kartverket.no/matrikkel",
+  "contactPoints": [{"category": "Kundesenter", "email": "post@kartverket.no", "telephone": "", "contactPage": ""}],
+  "keywords": [{"word": "matrikkel", "language": "nb"}],
   "status": "Completed",
   "resourceReferences": [
     {"referenceSource": "Default", "reference": "kartverk:matrikkel:brukernavn", "referenceType": "MaskinportenScope"},
@@ -66,6 +69,9 @@ var _ = Describe("Client.GetMaskinportenSchema", func() {
 			Title:                 altinn.MultilingualText{En: "Cadastre API", Nb: "Matrikkel API", Nn: "Matrikkel API"},
 			Description:           altinn.MultilingualText{En: "The Cadastre", Nb: "Matrikkelen", Nn: "Matrikkelen"},
 			DelegationDescription: altinn.MultilingualText{En: "Allows", Nb: "Gir", Nn: "Gir"},
+			Homepage:              "https://kartverket.no/matrikkel",
+			ContactPoints:         []altinn.ContactPoint{{Category: "Kundesenter", Email: "post@kartverket.no"}},
+			Keywords:              []altinn.Keyword{{Word: "matrikkel", Language: "nb"}},
 			Status:                "Completed",
 		}))
 		Expect(requests).To(HaveLen(1))

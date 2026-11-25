@@ -12,3 +12,11 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - altinnator.kartverket.no
+  resources:
+  - maskinportenschemaresources/status
+  verbs:
+  - get
+  - patch
+  - update
