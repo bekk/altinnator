@@ -21,6 +21,11 @@ import (
 
 const readyCondition = "Ready"
 
+// Altinn's status for a resource that is not visible and cannot be delegated
+const statusWithdrawn = "Withdrawn"
+
+var errWithdrawn = errors.New("withdrawn in Altinn, so it cannot be delegated")
+
 // Changes made directly in Altinn cause no event in the cluster, so Altinn is read again this often
 const driftCheckInterval = time.Hour
 
@@ -84,6 +89,8 @@ func (r *MaskinportenSchemaResourceReconciler) sync(
 	want := contentFrom(resource.Spec)
 	have, err := r.Registry.GetMaskinportenSchema(ctx, id)
 	switch {
+	case err == nil && have.Status == statusWithdrawn:
+		return fmt.Errorf("resource %s: %w", id, errWithdrawn)
 	case errors.Is(err, altinn.ErrNotFound):
 		err = r.Registry.CreateMaskinportenSchema(ctx, id, want)
 	case err == nil && differs(want, have):
@@ -119,6 +126,9 @@ func (r *MaskinportenSchemaResourceReconciler) report(
 		err = nil
 	case errors.Is(err, altinn.ErrTaken):
 		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Taken", err.Error()
+		err = nil
+	case errors.Is(err, errWithdrawn):
+		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Withdrawn", err.Error()
 		err = nil
 	case err != nil:
 		ready.Status, ready.Reason, ready.Message = metav1.ConditionFalse, "Failed", err.Error()

@@ -256,10 +256,31 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			registry.inAltinn.Title.Nb = "Gammel tittel"
 			registry.updateErr = fmt.Errorf(`responded 400: {"errors":{"Title":["Missing title in nn"]}}: %w`, altinn.ErrRejected)
 		}, "Rejected", "Missing title in nn"),
+		Entry("when the resource is withdrawn in Altinn", func() {
+			registry.inAltinn = sameAsSpec()
+			registry.inAltinn.Status = "Withdrawn"
+		}, "Withdrawn", "withdrawn"),
 		Entry("when another resource has the id", func() {
 			registry.getErr = fmt.Errorf("resource kv-matrikkel-brukernavn is a MaskinportenSchema owned by 974760223: %w",
 				altinn.ErrTaken)
 		}, "Taken", "owned by 974760223"),
+	)
+
+	DescribeTable("writes nothing to a resource withdrawn in Altinn",
+		func(change func(inAltinn *altinn.MaskinportenSchema)) {
+			registry.inAltinn = sameAsSpec()
+			registry.inAltinn.Status = "Withdrawn"
+			change(registry.inAltinn)
+
+			_, err := reconcile()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(registry.created).To(BeEmpty())
+			Expect(registry.updated).To(BeEmpty())
+			Expect(registry.policies).To(BeEmpty())
+		},
+		Entry("when it matches the spec", func(*altinn.MaskinportenSchema) {}),
+		Entry("when it differs from the spec", func(s *altinn.MaskinportenSchema) { s.Title.Nb = "Gammel tittel" }),
 	)
 
 	It("does not set the policy when Altinn rejects the new resource", func() {
