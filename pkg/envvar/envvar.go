@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kartverket/altinnator/pkg/altinn/auth"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -17,7 +18,7 @@ type EnvironmentalVariables struct {
 	AdditionalConfigMapData AdditionalConfigMapData `split_words:"true" required:"true"`
 	AltinnEnvironment       AltinnEnvironment       `split_words:"true" required:"true"`
 	MaskinportenClientID    string                  `split_words:"true" required:"true"`
-	MaskinportenClientJWK   Secret                  `split_words:"true" required:"true"`
+	MaskinportenClientJWK   MaskinportenKey         `split_words:"true" required:"true"`
 	// Where LOCAL finds the mock. A pod in kind cannot reach it on localhost.
 	LocalMockURL string `split_words:"true" default:"http://localhost:8090"`
 }
@@ -68,21 +69,25 @@ func (e EnvironmentalVariables) MaskinportenTokenURL() string {
 	return endpoints[e.AltinnEnvironment].maskinportenTokenURL
 }
 
-type Secret string
+type MaskinportenKey struct {
+	auth.Key
+}
 
-const masked = "***"
-
-func (Secret) String() string   { return masked }
-func (Secret) GoString() string { return masked }
-func (Secret) MarshalLog() any  { return masked }
-
-func (Secret) MarshalJSON() ([]byte, error) { return json.Marshal(masked) }
-
-func (s Secret) Reveal() string { return string(s) }
+func (k *MaskinportenKey) Decode(value string) error {
+	key, err := auth.ParseKey(value)
+	if err != nil {
+		return err
+	}
+	k.Key = key
+	return nil
+}
 
 func Load() error {
 	var loaded EnvironmentalVariables
 	if err := envconfig.Process("altinnator", &loaded); err != nil {
+		if parseErr, ok := errors.AsType[*envconfig.ParseError](err); ok {
+			return fmt.Errorf("%s: %w", parseErr.KeyName, parseErr.Err)
+		}
 		return err
 	}
 	if strings.TrimSpace(loaded.MaskinportenClientID) == "" {
