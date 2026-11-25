@@ -17,7 +17,6 @@ const (
 	resourcePath           = "/resourceregistry/api/v1/resource"
 	maskinportenSchemaType = "MaskinportenSchema"
 	maskinportenScopeType  = "MaskinportenScope"
-	kartverketOrgNumber    = "971040238"
 )
 
 // Altinn's rule for an identifier. Altinn gets it in the path, so it also keeps "/" and ".." out of the URL
@@ -53,12 +52,13 @@ type MultilingualText struct {
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+	orgNumber  string
 }
 
 var _ ResourceRegistry = (*Client)(nil)
 
-func NewClient(baseURL string, httpClient *http.Client) *Client {
-	return &Client{baseURL: baseURL, httpClient: httpClient}
+func NewClient(baseURL string, httpClient *http.Client, orgNumber string) *Client {
+	return &Client{baseURL: baseURL, httpClient: httpClient, orgNumber: orgNumber}
 }
 
 // GetMaskinportenSchema fails with ErrNotFound when Altinn has no resource with this id, and with ErrTaken when the
@@ -68,7 +68,7 @@ func (c *Client) GetMaskinportenSchema(ctx context.Context, id string) (*Maskinp
 	if err != nil {
 		return nil, err
 	}
-	if r.ResourceType != maskinportenSchemaType || r.HasCompetentAuthority.Organization != kartverketOrgNumber {
+	if r.ResourceType != maskinportenSchemaType || r.HasCompetentAuthority.Organization != c.orgNumber {
 		return nil, fmt.Errorf("resource %s is a %s owned by %s: %w",
 			id, r.ResourceType, r.HasCompetentAuthority.Organization, ErrTaken)
 	}
