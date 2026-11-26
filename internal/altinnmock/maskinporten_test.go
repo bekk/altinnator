@@ -84,6 +84,15 @@ var _ = Describe("Maskinporten", func() {
 		}),
 	)
 
+	It("tells Texas where its token endpoint and keys are", func() {
+		answer := get("/.well-known/oauth-authorization-server")
+
+		Expect(answer.status).To(Equal(http.StatusOK))
+		Expect(answer.json()).To(HaveKeyWithValue("issuer", server.URL+"/"))
+		Expect(answer.json()).To(HaveKeyWithValue("token_endpoint", server.URL+"/token"))
+		Expect(answer.json()).To(HaveKeyWithValue("jwks_uri", server.URL+"/jwk"))
+	})
+
 	It("gives Texas a key set when it starts", func() {
 		answer := get("/jwk")
 

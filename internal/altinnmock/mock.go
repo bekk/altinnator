@@ -25,6 +25,7 @@ func New() *Mock {
 	m.mux.HandleFunc("GET /authentication/api/v1/exchange/maskinporten", handleExchange(tokens))
 	m.mux.HandleFunc("POST /token", handleMaskinportenToken)
 	m.mux.HandleFunc("GET /jwk", handleMaskinportenKeys)
+	m.mux.HandleFunc("GET /.well-known/oauth-authorization-server", handleMaskinportenMetadata)
 	return m
 }
 

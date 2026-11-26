@@ -30,8 +30,8 @@ Check it rather than Altinn Studio when it matters how Altinn behaves.
 - `internal/altinnmock` plays the parts of Altinn that Altinnator calls, and keeps state, so tests can show that
   Altinnator leaves a matching resource alone, corrects a change made in Altinn and withdraws a resource. It is ported
   from altinn-management's mock. Keep it to what Altinnator and Texas call, and fix it when Altinn's source shows
-  Altinn behaves differently. It also plays Maskinporten for Texas (`/token` and `/jwk`), with tokens that have no
-  signature.
+  Altinn behaves differently. It also plays Maskinporten for Texas (`/token`, `/jwk` and its well-known metadata),
+  with tokens that have no signature.
 
 ## Conventions
 

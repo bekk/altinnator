@@ -59,6 +59,16 @@ func handleMaskinportenToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Texas finds Maskinporten's token endpoint and keys here when it starts
+func handleMaskinportenMetadata(w http.ResponseWriter, r *http.Request) {
+	baseURL := baseURLOf(r)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"issuer":         baseURL + "/",
+		"token_endpoint": baseURL + "/token",
+		"jwks_uri":       baseURL + "/jwk",
+	})
+}
+
 // Texas fetches Maskinporten's keys when it starts. The mock's tokens have no signature, so it has no keys to give
 func handleMaskinportenKeys(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"keys": []any{}})
