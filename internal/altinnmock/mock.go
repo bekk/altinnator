@@ -5,7 +5,8 @@ import (
 	"net/http"
 )
 
-// Mock plays the parts of Altinn that Altinnator calls, with the resources kept in memory
+// Mock plays the parts of Altinn that Altinnator calls, with the resources kept in memory, and the parts of Maskinporten
+// that Texas calls for Altinnator
 type Mock struct {
 	mux      *http.ServeMux
 	registry *registry
@@ -22,6 +23,9 @@ func New() *Mock {
 	m.mux.HandleFunc("POST "+resourcePath+"/{id}/policy", resources.handlePolicy)
 	m.mux.HandleFunc("PUT "+resourcePath+"/{id}/policy", resources.handlePolicy)
 	m.mux.HandleFunc("GET /authentication/api/v1/exchange/maskinporten", handleExchange(tokens))
+	m.mux.HandleFunc("POST /token", handleMaskinportenToken)
+	m.mux.HandleFunc("GET /jwk", handleMaskinportenKeys)
+	m.mux.HandleFunc("GET /.well-known/oauth-authorization-server", handleMaskinportenMetadata)
 	return m
 }
 
