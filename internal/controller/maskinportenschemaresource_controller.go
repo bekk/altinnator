@@ -16,10 +16,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const readyCondition = "Ready"
+
+const withdrawFinalizer = "altinnator.kartverket.no/withdraw"
 
 // Altinn's status for a resource that is not visible and cannot be delegated
 const statusWithdrawn = "Withdrawn"
@@ -53,7 +56,8 @@ func (r *MaskinportenSchemaResourceReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources,verbs=get;list;watch
+// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources/finalizers,verbs=update
 // +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources/status,verbs=get;update;patch
 
 // Reconcile makes the resource in Altinn match the MaskinportenSchemaResource, and shows how that went in its Ready
@@ -68,6 +72,12 @@ func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, re
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get MaskinportenSchemaResource: %w", err)
+	}
+
+	if controllerutil.AddFinalizer(resource, withdrawFinalizer) {
+		if err := r.Update(ctx, resource); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
 	}
 
 	syncErr := r.sync(ctx, resource)

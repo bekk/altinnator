@@ -18,6 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 type write struct {
@@ -72,6 +73,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		resource   *altinnatorv1alpha1.MaskinportenSchemaResource
 		registry   *fakeRegistry
 		kubeClient client.Client
+		intercept  interceptor.Funcs
 	)
 
 	BeforeEach(func() {
@@ -89,6 +91,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			},
 		}
 		registry = &fakeRegistry{}
+		intercept = interceptor.Funcs{}
 	})
 
 	sameAsSpec := func() *altinn.MaskinportenSchema {
@@ -118,6 +121,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			WithScheme(scheme).
 			WithObjects(resource).
 			WithStatusSubresource(resource).
+			WithInterceptorFuncs(intercept).
 			Build()
 		reconciler := &controller.MaskinportenSchemaResourceReconciler{Client: kubeClient, Registry: registry}
 		return reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
@@ -128,6 +132,39 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
 		return meta.FindStatusCondition(saved.Status.Conditions, "Ready")
 	}
+
+	It("adds the finalizer before it changes anything in Altinn", func() {
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(Equal([]string{"altinnator.kartverket.no/withdraw"}))
+	})
+
+	It("keeps a single finalizer when it is already there", func() {
+		resource.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(Equal([]string{"altinnator.kartverket.no/withdraw"}))
+	})
+
+	It("does not touch Altinn when the finalizer cannot be added", func() {
+		intercept.Update = func(
+			context.Context, client.WithWatch, client.Object, ...client.UpdateOption,
+		) error {
+			return errors.New("conflict")
+		}
+
+		_, err := reconcile()
+
+		Expect(err).To(HaveOccurred())
+		Expect(registry.created).To(BeEmpty())
+	})
 
 	It("creates a new resource in Altinn and sets its policy", func() {
 		_, err := reconcile()
