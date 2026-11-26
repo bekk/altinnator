@@ -19,6 +19,8 @@ func New() *Mock {
 	m.mux.HandleFunc("GET "+resourcePath+"/{id}", resources.handleGet)
 	m.mux.HandleFunc("POST "+resourcePath, resources.handleCreate)
 	m.mux.HandleFunc("PUT "+resourcePath+"/{id}", resources.handleUpdate)
+	m.mux.HandleFunc("POST "+resourcePath+"/{id}/policy", resources.handlePolicy)
+	m.mux.HandleFunc("PUT "+resourcePath+"/{id}/policy", resources.handlePolicy)
 	m.mux.HandleFunc("GET /authentication/api/v1/exchange/maskinporten", handleExchange(tokens))
 	return m
 }

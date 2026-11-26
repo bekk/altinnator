@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"slices"
@@ -96,6 +98,61 @@ func (rr *resourceRegistry) handleUpdate(w http.ResponseWriter, r *http.Request)
 	}
 	rr.registry.put(resource)
 	w.WriteHeader(http.StatusOK)
+}
+
+// Altinn takes a policy with POST and with PUT, and does the same with both
+func (rr *resourceRegistry) handlePolicy(w http.ResponseWriter, r *http.Request) {
+	claims, ok := rr.writer(w, r)
+	if !ok {
+		return
+	}
+	if !hasMediaType(r, "multipart/form-data") {
+		writeUnsupportedMediaType(w)
+		return
+	}
+	id := r.PathValue("id")
+	policy, err := policyFile(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, "The policy file can not be null")
+		return
+	}
+	resource, exists := rr.registry.get(id)
+	if !exists {
+		writeJSON(w, http.StatusBadRequest, "Unknown resource")
+		return
+	}
+	// Unlike a write of the resource, Altinn checks the owner it has, not the one in the request
+	if !hasWriteAccess(ownerOf(resource), claims) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	problem, err := policyProblem(policy, id)
+	if err != nil {
+		writeInternalError(w)
+		return
+	}
+	if problem != "" {
+		writeJSON(w, http.StatusBadRequest, problem)
+		return
+	}
+	w.Header().Set("Location", id+"/policy")
+	w.WriteHeader(http.StatusCreated)
+}
+
+func policyFile(r *http.Request) ([]byte, error) {
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		return nil, err
+	}
+	files := r.MultipartForm.File["policyFile"]
+	if len(files) == 0 {
+		return nil, errors.New("no policy file")
+	}
+	file, err := files[0].Open()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	return io.ReadAll(file)
 }
 
 func (rr *resourceRegistry) writer(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
