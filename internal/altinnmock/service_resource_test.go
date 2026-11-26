@@ -51,11 +51,11 @@ var _ = Describe("Altinn's checks of a resource", func() {
 		Expect(create(body).status).To(Equal(http.StatusCreated))
 	})
 
-	It("fails like Altinn, with 500, when the organisation number is not 9 digits", func() {
+	It("refuses an organisation number that is not 9 digits", func() {
 		answer := create(resource("kv-test", ownedBy("97104023", "kv")))
 
-		Expect(answer.status).To(Equal(http.StatusInternalServerError))
-		Expect(answer.mediaType()).To(Equal("application/problem+json"))
+		Expect(answer.status).To(Equal(http.StatusBadRequest))
+		Expect(answer.errors()).To(HaveKey("HasCompetentAuthority.Organization"))
 	})
 
 	It("checks the resource before it forbids another organisation's", func() {

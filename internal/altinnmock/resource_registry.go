@@ -131,12 +131,7 @@ func receiveResource(w http.ResponseWriter, r *http.Request) (map[string]any, bo
 
 // Altinn checks the resource before it checks who may write it
 func passesChecks(w http.ResponseWriter, resource map[string]any, isNew bool) bool {
-	orgCode, err := orgCodeOf(ownerOf(resource))
-	if err != nil {
-		writeInternalError(w)
-		return false
-	}
-	if messages := validateServiceResource(resource, isNew, orgCode); len(messages) > 0 {
+	if messages := validateServiceResource(resource, isNew, orgCodes[ownerOf(resource)]); len(messages) > 0 {
 		writeValidationProblem(w, messages)
 		return false
 	}

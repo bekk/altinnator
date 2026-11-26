@@ -1,7 +1,6 @@
 package altinnmock
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -146,19 +145,6 @@ func hasLanguage(resource map[string]any, field, language string) bool {
 // Altinn's register of organisations, which it looks up a resource owner's org code in. The mock knows Kartverket and
 // one other organisation
 var orgCodes = map[string]string{"971040238": "kv", "981544315": "slf"}
-
-var errNotOrganizationNumber = errors.New("not an organisation number")
-
-// Like Altinn, it fails when the organisation number is not 9 digits
-func orgCodeOf(organization string) (string, error) {
-	if organization == "" {
-		return "", nil
-	}
-	if len(organization) != 9 || strings.Trim(organization, "0123456789") != "" {
-		return "", errNotOrganizationNumber
-	}
-	return orgCodes[organization], nil
-}
 
 func text(object map[string]any, field string) string {
 	value, _ := object[field].(string)
