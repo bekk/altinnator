@@ -42,9 +42,13 @@ mise run dev:run            # run the controller locally, with the pinned tools 
 mise run dev:run
 ```
 
+- Both run without the webhook (`ENABLE_WEBHOOKS=false`), since its certificate only exists in the cluster. Run
+  Altinnator in the local cluster to try it.
+
 ### Run in the local cluster
 
-- Builds the image, loads it into Kind, applies resources and waits for readiness:
+- Installs cert-manager, which gives the webhook its certificate, then builds the image, loads it into Kind, applies
+  resources and waits for readiness:
 
 ```bash
 mise run deploy
@@ -79,8 +83,8 @@ mise run test
   - The Ginkgo CLI as test executor. Install it from the project root, which picks the version in `go.mod`:
     `go install github.com/onsi/ginkgo/v2/ginkgo`. See the [Ginkgo documentation](https://onsi.github.io/ginkgo/#installing-ginkgo) for details.
 
-- End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They need the controller running
-  (`mise run dev:run`, IDE, or `mise run deploy`):
+- End-to-end tests use [Chainsaw](https://kyverno.github.io/chainsaw/). They need Altinnator running in the local
+  cluster (`mise run deploy`), where the webhook runs too:
 
 ```bash
 mise run chainsaw:test-all

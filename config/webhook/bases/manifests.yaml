@@ -1,0 +1,25 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-altinnator-kartverket-no-v1alpha1-maskinportenschemaresource
+  failurePolicy: Fail
+  name: vmaskinportenschemaresource-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - altinnator.kartverket.no
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - maskinportenschemaresources
+  sideEffects: None
