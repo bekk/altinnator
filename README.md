@@ -28,8 +28,9 @@
 ## 🎯 About the project
 
 An API that Kartverket offers through Maskinporten can be delegated in Altinn when Altinn's Resource Registry has a
-resource of type `MaskinportenSchema` for it. Other access in Altinn is described with a `GenericAccessResource`.
-With Altinnator, a team describes such a resource in YAML, and Altinnator makes Altinn match it. Deleting the custom resource withdraws the resource in Altinn, and its id can never be used again.
+resource of type `MaskinportenSchema` for it. Other access in Altinn is described with a `GenericAccessResource`. With
+Altinnator, a team describes such a resource in YAML, and Altinnator makes Altinn match it. Deleting the custom
+resource withdraws the resource in Altinn, and its id can never be used again.
 
 It will handle two kinds, both in `altinnator.kartverket.no/v1alpha1`:
 

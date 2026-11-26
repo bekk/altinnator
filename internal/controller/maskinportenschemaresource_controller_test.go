@@ -243,7 +243,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			fmt.Errorf("resource kv-matrikkel-brukernavn: %w", altinn.ErrTaken)),
 	)
 
-	It("only withdraws a MaskinportenSchemaResource that is being deleted", func() {
+	It("does not sync a MaskinportenSchemaResource that is being deleted", func() {
 		markDeleting()
 		registry.inAltinn = sameAsSpec()
 		registry.inAltinn.Title.Nb = "Gammel tittel"

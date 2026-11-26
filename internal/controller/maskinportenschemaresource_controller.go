@@ -57,7 +57,7 @@ func (r *MaskinportenSchemaResourceReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources/finalizers,verbs=update
 // +kubebuilder:rbac:groups=altinnator.kartverket.no,resources=maskinportenschemaresources/status,verbs=get;update;patch
 
