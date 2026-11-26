@@ -27,6 +27,10 @@ Check it rather than Altinn Studio when it matters how Altinn behaves.
 - Altinn can't tell Kartverket's teams apart: one token may change every Kartverket resource.
 - 400, 401, 403, 404, 409 and 412 never succeed on retry. 503 and network errors may.
 - A policy is XACML, sent as a file. Altinn answers bad XML with 500.
+- `internal/altinnmock` plays the parts of Altinn that Altinnator calls, and keeps state, so tests can show that
+  Altinnator leaves a matching resource alone, corrects a change made in Altinn and withdraws a resource. It is ported
+  from altinn-management's mock. Keep it to what Altinnator calls, and fix it when Altinn's source shows Altinn
+  behaves differently.
 
 ## Conventions
 
