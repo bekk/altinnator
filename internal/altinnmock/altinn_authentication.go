@@ -56,8 +56,8 @@ func handleExchange(tokens *tokens) http.HandlerFunc {
 	}
 }
 
-// Altinnator gets its Maskinporten token from Texas, which in a test gets it from mock-oauth2-server or a fake. So
-// unlike Altinn, the mock cannot check the token's signature, only that it is a JWT that has not expired
+// Altinnator gets its Maskinporten token from Texas, which outside production gets it from a mock. So unlike Altinn,
+// the mock does not check the token's signature, only that it is a JWT that has not expired
 func maskinportenClaims(token string) (map[string]any, bool) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
