@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
 	"github.com/kartverket/altinnator/internal/controller"
@@ -11,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,14 +29,16 @@ type write struct {
 }
 
 type fakeRegistry struct {
-	inAltinn  *altinn.MaskinportenSchema
-	getErr    error
-	createErr error
-	updateErr error
-	policyErr error
-	created   []write
-	updated   []write
-	policies  []string
+	inAltinn    *altinn.MaskinportenSchema
+	getErr      error
+	createErr   error
+	updateErr   error
+	policyErr   error
+	withdrawErr error
+	created     []write
+	updated     []write
+	policies    []string
+	withdrawn   []string
 }
 
 func (f *fakeRegistry) GetMaskinportenSchema(_ context.Context, id string) (*altinn.MaskinportenSchema, error) {
@@ -64,6 +68,11 @@ func (f *fakeRegistry) UpdateMaskinportenSchema(
 func (f *fakeRegistry) SetMaskinportenSchemaPolicy(_ context.Context, id string) error {
 	f.policies = append(f.policies, id)
 	return f.policyErr
+}
+
+func (f *fakeRegistry) WithdrawMaskinportenSchema(_ context.Context, id string) error {
+	f.withdrawn = append(f.withdrawn, id)
+	return f.withdrawErr
 }
 
 var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
@@ -127,6 +136,16 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		return reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
 	}
 
+	markDeleting := func() {
+		resource.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+		resource.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	}
+
+	isGone := func() bool {
+		err := kubeClient.Get(context.Background(), key, new(altinnatorv1alpha1.MaskinportenSchemaResource))
+		return apierrors.IsNotFound(err)
+	}
+
 	readyCondition := func() *metav1.Condition {
 		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
 		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
@@ -184,6 +203,62 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(readyCondition()).To(PointTo(MatchFields(IgnoreExtras, Fields{
 			"Status": Equal(metav1.ConditionTrue), "Reason": Equal("Synced"), "ObservedGeneration": Equal(int64(1)),
 		})))
+	})
+
+	It("withdraws the resource in Altinn and lets the MaskinportenSchemaResource go", func() {
+		markDeleting()
+
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(registry.withdrawn).To(Equal([]string{"kv-matrikkel-brukernavn"}))
+		Expect(isGone()).To(BeTrue())
+	})
+
+	It("keeps the MaskinportenSchemaResource and tries again when withdrawing fails", func() {
+		markDeleting()
+		registry.withdrawErr = errors.New("withdrawing resource kv-matrikkel-brukernavn in Altinn: responded 503")
+
+		_, err := reconcile()
+
+		Expect(err).To(MatchError(ContainSubstring("responded 503")))
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(ContainElement("altinnator.kartverket.no/withdraw"))
+	})
+
+	DescribeTable("lets the MaskinportenSchemaResource go when Altinn has nothing of ours to withdraw",
+		func(withdrawErr error) {
+			markDeleting()
+			registry.withdrawErr = withdrawErr
+
+			_, err := reconcile()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isGone()).To(BeTrue())
+		},
+		Entry("when the resource was never created",
+			fmt.Errorf("resource kv-matrikkel-brukernavn: %w", altinn.ErrNotFound)),
+		Entry("when another resource has the id",
+			fmt.Errorf("resource kv-matrikkel-brukernavn: %w", altinn.ErrTaken)),
+	)
+
+	It("only withdraws a MaskinportenSchemaResource that is being deleted", func() {
+		markDeleting()
+		registry.inAltinn = sameAsSpec()
+		registry.inAltinn.Title.Nb = "Gammel tittel"
+
+		_, _ = reconcile()
+
+		Expect(registry.created).To(BeEmpty())
+		Expect(registry.updated).To(BeEmpty())
+		Expect(registry.policies).To(BeEmpty())
+	})
+
+	It("does not withdraw anything in Altinn when the resource is not being deleted", func() {
+		_, _ = reconcile()
+
+		Expect(registry.withdrawn).To(BeEmpty())
 	})
 
 	DescribeTable("updates the resource in Altinn when it differs from the spec",

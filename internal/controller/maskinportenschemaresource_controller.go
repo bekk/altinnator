@@ -38,6 +38,7 @@ type registry interface {
 	CreateMaskinportenSchema(ctx context.Context, id string, content altinn.MaskinportenSchemaContent) error
 	UpdateMaskinportenSchema(ctx context.Context, id string, content altinn.MaskinportenSchemaContent) error
 	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
+	WithdrawMaskinportenSchema(ctx context.Context, id string) error
 }
 
 // MaskinportenSchemaResourceReconciler reconciles a MaskinportenSchemaResource object
@@ -74,6 +75,10 @@ func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, fmt.Errorf("failed to get MaskinportenSchemaResource: %w", err)
 	}
 
+	if !resource.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, r.withdraw(ctx, resource)
+	}
+
 	if controllerutil.AddFinalizer(resource, withdrawFinalizer) {
 		if err := r.Update(ctx, resource); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
@@ -89,6 +94,28 @@ func (r *MaskinportenSchemaResourceReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+}
+
+// withdraw withdraws the resource in Altinn, since Altinn does not allow deleting it, and then lets the
+// MaskinportenSchemaResource go. It returns an error, and keeps the finalizer, when trying again may help.
+func (r *MaskinportenSchemaResourceReconciler) withdraw(
+	ctx context.Context,
+	resource *altinnatorv1alpha1.MaskinportenSchemaResource,
+) error {
+	if !controllerutil.ContainsFinalizer(resource, withdrawFinalizer) {
+		return nil
+	}
+	err := r.Registry.WithdrawMaskinportenSchema(ctx, resource.Spec.ResourceID)
+	// There is nothing of ours to withdraw, and keeping the finalizer would stop the MaskinportenSchemaResource from
+	// ever being deleted
+	if err != nil && !errors.Is(err, altinn.ErrNotFound) && !errors.Is(err, altinn.ErrTaken) {
+		return fmt.Errorf("failed to withdraw resource %s in Altinn: %w", resource.Spec.ResourceID, err)
+	}
+	controllerutil.RemoveFinalizer(resource, withdrawFinalizer)
+	if err := r.Update(ctx, resource); err != nil {
+		return fmt.Errorf("failed to remove finalizer: %w", err)
+	}
+	return nil
 }
 
 func (r *MaskinportenSchemaResourceReconciler) sync(
