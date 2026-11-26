@@ -48,7 +48,7 @@ func (rr *resourceRegistry) handleCreate(w http.ResponseWriter, r *http.Request)
 		writeInternalError(w)
 		return
 	}
-	if !isAllowed(w, resource, claims) {
+	if !passesChecks(w, resource, true) || !isAllowed(w, resource, claims) {
 		return
 	}
 	if !rr.registry.create(resource) {
@@ -91,7 +91,7 @@ func (rr *resourceRegistry) handleUpdate(w http.ResponseWriter, r *http.Request)
 		writeValidationProblem(w, missing)
 		return
 	}
-	if !isAllowed(w, resource, claims) {
+	if !passesChecks(w, resource, false) || !isAllowed(w, resource, claims) {
 		return
 	}
 	rr.registry.put(resource)
@@ -127,6 +127,15 @@ func receiveResource(w http.ResponseWriter, r *http.Request) (map[string]any, bo
 		return nil, false
 	}
 	return keepAsAltinn(body), true
+}
+
+// Altinn checks the resource before it checks who may write it
+func passesChecks(w http.ResponseWriter, resource map[string]any, isNew bool) bool {
+	if messages := validateServiceResource(resource, isNew, orgCodes[ownerOf(resource)]); len(messages) > 0 {
+		writeValidationProblem(w, messages)
+		return false
+	}
+	return true
 }
 
 func isAllowed(w http.ResponseWriter, resource map[string]any, claims map[string]any) bool {
