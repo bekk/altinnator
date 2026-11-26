@@ -430,4 +430,30 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(registry.created).To(BeEmpty())
 	})
+
+	It("gets a new generation when deleted, so GenerationChangedPredicate lets the delete through", func() {
+		created := resource.DeepCopy()
+		created.Namespace = "default"
+		created.Name = "delete-bumps-generation"
+		created.Generation = 0
+		created.ResourceVersion = ""
+		created.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+		Expect(k8sClient.Create(ctx, created)).To(Succeed())
+		DeferCleanup(func() {
+			latest := &altinnatorv1alpha1.MaskinportenSchemaResource{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(created), latest); err != nil {
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				return
+			}
+			latest.Finalizers = nil
+			Expect(client.IgnoreNotFound(k8sClient.Update(ctx, latest))).To(Succeed())
+		})
+
+		Expect(k8sClient.Delete(ctx, created)).To(Succeed())
+
+		saved := &altinnatorv1alpha1.MaskinportenSchemaResource{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(created), saved)).To(Succeed())
+		Expect(saved.DeletionTimestamp).NotTo(BeNil())
+		Expect(saved.Generation).To(BeNumerically(">", created.Generation))
+	})
 })

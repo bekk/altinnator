@@ -9,6 +9,7 @@ test and lint it.
 - Two kinds, both in `altinnator.kartverket.no/v1alpha1`: `MaskinportenSchemaResource` and `GenericAccessResource`,
   one for each Altinn resource type. Teams write them directly, and they aren't tied to Skiperator or other parts of
   SKIP.
+- Deleting the custom resource withdraws the resource in Altinn; a finalizer keeps it until that has worked.
 - The spec stays close to Altinn's API. Leave out, or make optional, what a team doesn't need to set, and let
   Altinnator fill in what is the same for every resource.
 - The custom resource is the source of truth for the fields it has: Altinnator reads each resource from Altinn every
