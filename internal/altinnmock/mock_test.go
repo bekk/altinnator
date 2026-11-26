@@ -24,6 +24,16 @@ var _ = Describe("Changing a resource directly in the mock", func() {
 		Expect(mock.SetResource(map[string]any{"title": texts("kv-test")})).To(HaveOccurred())
 	})
 
+	It("refuses a resource that is not JSON, and keeps none of it", func() {
+		unencodable := resource("kv-test")
+		unencodable["status"] = make(chan int)
+
+		Expect(mock.SetResource(unencodable)).To(HaveOccurred())
+
+		_, found := mock.Resource("kv-test")
+		Expect(found).To(BeFalse())
+	})
+
 	It("finds no resource that was never made", func() {
 		_, found := mock.Resource("kv-nothing")
 

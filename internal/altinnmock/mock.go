@@ -34,6 +34,10 @@ func (m *Mock) SetResource(resource map[string]any) error {
 	if _, ok := resource["identifier"].(string); !ok {
 		return errors.New("the resource has no identifier")
 	}
-	m.registry.put(deepCopy(resource))
+	copied, err := deepCopy(resource)
+	if err != nil {
+		return err
+	}
+	m.registry.put(copied)
 	return nil
 }

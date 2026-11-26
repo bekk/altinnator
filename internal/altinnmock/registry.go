@@ -55,18 +55,21 @@ func (r *registry) put(resource map[string]any) {
 }
 
 func withMetadata(resource *stored) map[string]any {
-	result := deepCopy(resource.newest.resource)
+	// A stored resource was copied once already, so copying it again cannot fail
+	result, _ := deepCopy(resource.newest.resource)
 	result["versionId"] = resource.newest.versionID
 	result["createdAt"] = resource.createdAt
 	result["updatedAt"] = resource.newest.updatedAt
 	return result
 }
 
-func deepCopy(value map[string]any) map[string]any {
-	raw, _ := json.Marshal(value)
+func deepCopy(value map[string]any) (map[string]any, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
 	var result map[string]any
-	_ = json.Unmarshal(raw, &result)
-	return result
+	return result, json.Unmarshal(raw, &result)
 }
 
 // Like Altinn's: microseconds, and an offset of +00:00
