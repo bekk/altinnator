@@ -11,7 +11,14 @@ rules:
   verbs:
   - get
   - list
+  - update
   - watch
+- apiGroups:
+  - altinnator.kartverket.no
+  resources:
+  - maskinportenschemaresources/finalizers
+  verbs:
+  - update
 - apiGroups:
   - altinnator.kartverket.no
   resources:

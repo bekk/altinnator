@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	altinnatorv1alpha1 "github.com/kartverket/altinnator/api/v1alpha1"
 	"github.com/kartverket/altinnator/internal/controller"
@@ -11,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +20,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 type write struct {
@@ -26,14 +29,16 @@ type write struct {
 }
 
 type fakeRegistry struct {
-	inAltinn  *altinn.MaskinportenSchema
-	getErr    error
-	createErr error
-	updateErr error
-	policyErr error
-	created   []write
-	updated   []write
-	policies  []string
+	inAltinn    *altinn.MaskinportenSchema
+	getErr      error
+	createErr   error
+	updateErr   error
+	policyErr   error
+	withdrawErr error
+	created     []write
+	updated     []write
+	policies    []string
+	withdrawn   []string
 }
 
 func (f *fakeRegistry) GetMaskinportenSchema(_ context.Context, id string) (*altinn.MaskinportenSchema, error) {
@@ -65,6 +70,11 @@ func (f *fakeRegistry) SetMaskinportenSchemaPolicy(_ context.Context, id string)
 	return f.policyErr
 }
 
+func (f *fakeRegistry) WithdrawMaskinportenSchema(_ context.Context, id string) error {
+	f.withdrawn = append(f.withdrawn, id)
+	return f.withdrawErr
+}
+
 var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 	key := types.NamespacedName{Namespace: "matrikkel", Name: "brukernavn"}
 
@@ -72,6 +82,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		resource   *altinnatorv1alpha1.MaskinportenSchemaResource
 		registry   *fakeRegistry
 		kubeClient client.Client
+		intercept  interceptor.Funcs
 	)
 
 	BeforeEach(func() {
@@ -89,6 +100,7 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			},
 		}
 		registry = &fakeRegistry{}
+		intercept = interceptor.Funcs{}
 	})
 
 	sameAsSpec := func() *altinn.MaskinportenSchema {
@@ -118,9 +130,20 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 			WithScheme(scheme).
 			WithObjects(resource).
 			WithStatusSubresource(resource).
+			WithInterceptorFuncs(intercept).
 			Build()
 		reconciler := &controller.MaskinportenSchemaResourceReconciler{Client: kubeClient, Registry: registry}
 		return reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	}
+
+	markDeleting := func() {
+		resource.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+		resource.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	}
+
+	isGone := func() bool {
+		err := kubeClient.Get(context.Background(), key, new(altinnatorv1alpha1.MaskinportenSchemaResource))
+		return apierrors.IsNotFound(err)
 	}
 
 	readyCondition := func() *metav1.Condition {
@@ -128,6 +151,39 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
 		return meta.FindStatusCondition(saved.Status.Conditions, "Ready")
 	}
+
+	It("adds the finalizer before it changes anything in Altinn", func() {
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(Equal([]string{"altinnator.kartverket.no/withdraw"}))
+	})
+
+	It("keeps a single finalizer when it is already there", func() {
+		resource.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(Equal([]string{"altinnator.kartverket.no/withdraw"}))
+	})
+
+	It("does not touch Altinn when the finalizer cannot be added", func() {
+		intercept.Update = func(
+			context.Context, client.WithWatch, client.Object, ...client.UpdateOption,
+		) error {
+			return errors.New("conflict")
+		}
+
+		_, err := reconcile()
+
+		Expect(err).To(HaveOccurred())
+		Expect(registry.created).To(BeEmpty())
+	})
 
 	It("creates a new resource in Altinn and sets its policy", func() {
 		_, err := reconcile()
@@ -147,6 +203,62 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 		Expect(readyCondition()).To(PointTo(MatchFields(IgnoreExtras, Fields{
 			"Status": Equal(metav1.ConditionTrue), "Reason": Equal("Synced"), "ObservedGeneration": Equal(int64(1)),
 		})))
+	})
+
+	It("withdraws the resource in Altinn and lets the MaskinportenSchemaResource go", func() {
+		markDeleting()
+
+		_, err := reconcile()
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(registry.withdrawn).To(Equal([]string{"kv-matrikkel-brukernavn"}))
+		Expect(isGone()).To(BeTrue())
+	})
+
+	It("keeps the MaskinportenSchemaResource and tries again when withdrawing fails", func() {
+		markDeleting()
+		registry.withdrawErr = errors.New("withdrawing resource kv-matrikkel-brukernavn in Altinn: responded 503")
+
+		_, err := reconcile()
+
+		Expect(err).To(MatchError(ContainSubstring("responded 503")))
+		saved := new(altinnatorv1alpha1.MaskinportenSchemaResource)
+		Expect(kubeClient.Get(context.Background(), key, saved)).To(Succeed())
+		Expect(saved.Finalizers).To(ContainElement("altinnator.kartverket.no/withdraw"))
+	})
+
+	DescribeTable("lets the MaskinportenSchemaResource go when Altinn has nothing of ours to withdraw",
+		func(withdrawErr error) {
+			markDeleting()
+			registry.withdrawErr = withdrawErr
+
+			_, err := reconcile()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(isGone()).To(BeTrue())
+		},
+		Entry("when the resource was never created",
+			fmt.Errorf("resource kv-matrikkel-brukernavn: %w", altinn.ErrNotFound)),
+		Entry("when another resource has the id",
+			fmt.Errorf("resource kv-matrikkel-brukernavn: %w", altinn.ErrTaken)),
+	)
+
+	It("does not sync a MaskinportenSchemaResource that is being deleted", func() {
+		markDeleting()
+		registry.inAltinn = sameAsSpec()
+		registry.inAltinn.Title.Nb = "Gammel tittel"
+
+		_, _ = reconcile()
+
+		Expect(registry.created).To(BeEmpty())
+		Expect(registry.updated).To(BeEmpty())
+		Expect(registry.policies).To(BeEmpty())
+	})
+
+	It("does not withdraw anything in Altinn when the resource is not being deleted", func() {
+		_, _ = reconcile()
+
+		Expect(registry.withdrawn).To(BeEmpty())
 	})
 
 	DescribeTable("updates the resource in Altinn when it differs from the spec",
@@ -317,5 +429,31 @@ var _ = Describe("MaskinportenSchemaResourceReconciler", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(registry.created).To(BeEmpty())
+	})
+
+	It("gets a new generation when deleted, so GenerationChangedPredicate lets the delete through", func() {
+		created := resource.DeepCopy()
+		created.Namespace = "default"
+		created.Name = "delete-bumps-generation"
+		created.Generation = 0
+		created.ResourceVersion = ""
+		created.Finalizers = []string{"altinnator.kartverket.no/withdraw"}
+		Expect(k8sClient.Create(ctx, created)).To(Succeed())
+		DeferCleanup(func() {
+			latest := &altinnatorv1alpha1.MaskinportenSchemaResource{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(created), latest); err != nil {
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				return
+			}
+			latest.Finalizers = nil
+			Expect(client.IgnoreNotFound(k8sClient.Update(ctx, latest))).To(Succeed())
+		})
+
+		Expect(k8sClient.Delete(ctx, created)).To(Succeed())
+
+		saved := &altinnatorv1alpha1.MaskinportenSchemaResource{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(created), saved)).To(Succeed())
+		Expect(saved.DeletionTimestamp).NotTo(BeNil())
+		Expect(saved.Generation).To(BeNumerically(">", created.Generation))
 	})
 })
