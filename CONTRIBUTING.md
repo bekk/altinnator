@@ -59,6 +59,15 @@ never sees the key. Three files in `config/manager/base` hold the configuration:
 mise run dev:run
 ```
 
+### Run the Altinn mock and Texas
+
+[compose.yaml](compose.yaml) runs the Altinn mock on `localhost:8090` and Texas on `localhost:3000`, where Texas gets
+its Maskinporten tokens from the mock:
+
+```bash
+docker compose up --build
+```
+
 ### Run in the local cluster
 
 - Builds the image, loads it into Kind, applies resources and waits for readiness:
@@ -173,3 +182,4 @@ Chainsaw when updating Go version).
 2. Copy the "index digest" (top left), and paste into all relevant dockerfiles:
    1. Dockerfile
    2. Dockerfile.goreleaser
+   3. Dockerfile.altinnmock
