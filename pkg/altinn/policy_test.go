@@ -6,25 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"time"
 
-	"github.com/kartverket/altinnator/internal/altinn/auth"
 	"github.com/kartverket/altinnator/pkg/altinn"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-type fakeTokenProvider struct {
-	refused []string
-}
-
-func (f *fakeTokenProvider) Token(context.Context) (auth.Token, error) {
-	return auth.NewToken("test-token", time.Now().Add(time.Hour)), nil
-}
-
-func (f *fakeTokenProvider) Refused(token auth.Token) {
-	f.refused = append(f.refused, token.Reveal())
-}
 
 type policyRequest struct {
 	method        string
