@@ -33,7 +33,7 @@ spec:
                 name: altinnator-texas
             - secretRef:
                 name: altinnator-maskinporten
-          image: ghcr.io/nais/texas:2026-11-05-083041-a994632
+          image: ghcr.io/nais/texas
           name: texas
           ports:
             - containerPort: 3001

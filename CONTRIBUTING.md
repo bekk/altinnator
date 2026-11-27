@@ -30,16 +30,17 @@ mise run dev:run            # run the controller locally, with the pinned tools 
 
 ### Environment variables
 
-Altinnator gets its Maskinporten tokens from [Texas](https://github.com/nais/texas), which runs next to it in its pod
-and answers on `http://localhost:3000/api/v1/token`. Texas holds the Maskinporten client and its key, so Altinnator
-never sees the key. Three files in `config/manager/base` hold the configuration:
+Altinnator gets its Maskinporten tokens from [Texas](https://github.com/nais/texas), which answers on
+`http://localhost:3000/api/v1/token`: next to Altinnator in its pod in kind, or from [compose.yaml](compose.yaml) when
+Altinnator runs on your host. Texas holds the Maskinporten client and its key, so Altinnator never sees the key. Three
+files in `config/manager/base` hold the configuration:
 
 - `.env` becomes the ConfigMap `altinnator-env`, Altinnator's configuration. `ALTINNATOR_ALTINN_PLATFORM_BASE_URL`
-  is where Altinnator reaches Altinn: the mock in [altinn-management](https://github.com/bekk/altinn-management)
-  (`./gradlew :mock-api:run`) on `http://localhost:8090`. In kind, `localhost` is the pod itself, so
-  `deployment.yaml` sets it to `http://host.docker.internal:8090`, Docker Desktop's name for your host.
+  is where Altinnator reaches Altinn: the Altinn mock from [compose.yaml](compose.yaml) on `http://localhost:8090`.
+  In kind, `localhost` is the pod itself, so `deployment.yaml` sets it to `http://host.docker.internal:8090`, Docker
+  Desktop's name for your host. Run `docker compose up --build` for kind too.
 - `texas.env` becomes the ConfigMap `altinnator-texas`, Texas's settings that are not secret: the Maskinporten client
-  ID, and where Texas finds Maskinporten, which locally is the mock.
+  ID, and where Texas finds Maskinporten, which locally is the Altinn mock.
 - `maskinporten.env` becomes the Secret `altinnator-maskinporten`, which only Texas reads. It holds the Maskinporten
   client's key. It is committed, and holds a made-up key that only the mock accepts. Altinnator only runs locally
   against the mock, never against TT02 or PROD, so never put a real key in it.
