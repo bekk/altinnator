@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -40,6 +41,7 @@ var (
 type ResourceRegistry interface {
 	GetMaskinportenSchema(ctx context.Context, id string) (*MaskinportenSchema, error)
 	CreateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
+	UpdateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error
 	WithdrawMaskinportenSchema(ctx context.Context, id string) error
 
 	SetMaskinportenSchemaPolicy(ctx context.Context, id string) error
@@ -57,6 +59,9 @@ type MaskinportenSchema struct {
 	Title                 MultilingualText
 	Description           MultilingualText
 	DelegationDescription MultilingualText
+	Homepage              string
+	ContactPoints         []ContactPoint
+	Keywords              []Keyword
 	Status                string
 }
 
@@ -185,6 +190,80 @@ func (c *Client) SetMaskinportenSchemaPolicy(ctx context.Context, id string) err
 		return fmt.Errorf("setting the policy of resource %s in Altinn: %w", id, err)
 	}
 	return nil
+}
+
+func (c *Client) UpdateMaskinportenSchema(ctx context.Context, id string, content MaskinportenSchemaContent) error {
+	if c.tokenProvider == nil {
+		return errors.New("updating a resource needs an AccessTokenProvider")
+	}
+	r, err := c.getOwnedMaskinportenSchema(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	body, err := withContent(r.raw, content)
+	if err != nil {
+		return fmt.Errorf("building updated resource %s: %w", id, err)
+	}
+	resourceURL, err := url.JoinPath(c.baseURL, resourcePath, id)
+	if err != nil {
+		return fmt.Errorf("building the URL of resource %s: %w", id, err)
+	}
+	if _, err := c.write(ctx, http.MethodPut, resourceURL, "application/json", body, http.StatusOK); err != nil {
+		return fmt.Errorf("updating resource %s in Altinn: %w", id, err)
+	}
+	return nil
+}
+
+// Altinn replaces the whole resource
+func withContent(raw []byte, content MaskinportenSchemaContent) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+
+	changed, err := json.Marshal(contentFrom(content))
+	if err != nil {
+		return nil, err
+	}
+	var replaced map[string]json.RawMessage
+	if err := json.Unmarshal(changed, &replaced); err != nil {
+		return nil, err
+	}
+	for _, field := range contentFields {
+		delete(fields, field)
+	}
+	maps.Copy(fields, replaced)
+
+	references, err := withScopes(fields["resourceReferences"], content.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	fields["resourceReferences"] = references
+	return json.Marshal(fields)
+}
+
+func withScopes(oldReferences json.RawMessage, scopes []string) (json.RawMessage, error) {
+	var old []json.RawMessage
+	if oldReferences != nil {
+		if err := json.Unmarshal(oldReferences, &old); err != nil {
+			return nil, err
+		}
+	}
+	references := []any{}
+	for _, reference := range scopeReferences(scopes) {
+		references = append(references, reference)
+	}
+	for _, reference := range old {
+		var r resourceReference
+		if err := json.Unmarshal(reference, &r); err != nil {
+			return nil, err
+		}
+		if r.ReferenceType != maskinportenScopeType {
+			references = append(references, reference)
+		}
+	}
+	return json.Marshal(references)
 }
 
 func (c *Client) WithdrawMaskinportenSchema(ctx context.Context, id string) error {
@@ -362,6 +441,9 @@ type resource struct {
 	Title                 MultilingualText    `json:"title"`
 	Description           MultilingualText    `json:"description"`
 	RightDescription      MultilingualText    `json:"rightDescription"`
+	Homepage              string              `json:"homepage"`
+	ContactPoints         []ContactPoint      `json:"contactPoints"`
+	Keywords              []Keyword           `json:"keywords"`
 	Status                string              `json:"status"`
 	Delegable             bool                `json:"delegable"`
 	Visible               bool                `json:"visible"`
@@ -392,18 +474,39 @@ func (r *resource) toMaskinportenSchema(id string) *MaskinportenSchema {
 		Title:                 r.Title,
 		Description:           r.Description,
 		DelegationDescription: r.RightDescription,
+		Homepage:              r.Homepage,
+		ContactPoints:         r.ContactPoints,
+		Keywords:              r.Keywords,
 		Status:                r.Status,
 	}
 }
 
+// What a create sets and an update replaces, apart from the scopes
+type resourceContent struct {
+	Title            MultilingualText `json:"title"`
+	Description      MultilingualText `json:"description"`
+	RightDescription MultilingualText `json:"rightDescription"`
+	Homepage         string           `json:"homepage,omitempty"`
+	ContactPoints    []ContactPoint   `json:"contactPoints,omitempty"`
+	Keywords         []Keyword        `json:"keywords,omitempty"`
+}
+
+var contentFields = []string{"title", "description", "rightDescription", "homepage", "contactPoints", "keywords"}
+
+func contentFrom(content MaskinportenSchemaContent) resourceContent {
+	return resourceContent{
+		Title:            content.Title,
+		Description:      content.Description,
+		RightDescription: content.DelegationDescription,
+		Homepage:         content.Homepage,
+		ContactPoints:    content.ContactPoints,
+		Keywords:         content.Keywords,
+	}
+}
+
 type newResource struct {
-	Identifier            string                 `json:"identifier"`
-	Title                 MultilingualText       `json:"title"`
-	Description           MultilingualText       `json:"description"`
-	RightDescription      MultilingualText       `json:"rightDescription"`
-	Homepage              string                 `json:"homepage,omitempty"`
-	ContactPoints         []ContactPoint         `json:"contactPoints,omitempty"`
-	Keywords              []Keyword              `json:"keywords,omitempty"`
+	Identifier string `json:"identifier"`
+	resourceContent
 	ResourceReferences    []newResourceReference `json:"resourceReferences"`
 	Delegable             bool                   `json:"delegable"`
 	Visible               bool                   `json:"visible"`
@@ -423,24 +526,23 @@ type newCompetentAuthority struct {
 	OrgCode      string `json:"orgcode"`
 }
 
-func (c *Client) newResourceFrom(id string, content MaskinportenSchemaContent) newResource {
-	references := make([]newResourceReference, 0, len(content.Scopes))
-	for _, scope := range content.Scopes {
+func scopeReferences(scopes []string) []newResourceReference {
+	references := make([]newResourceReference, 0, len(scopes))
+	for _, scope := range scopes {
 		references = append(references, newResourceReference{
 			ReferenceSource: "Default",
 			Reference:       scope,
 			ReferenceType:   maskinportenScopeType,
 		})
 	}
+	return references
+}
+
+func (c *Client) newResourceFrom(id string, content MaskinportenSchemaContent) newResource {
 	return newResource{
 		Identifier:            id,
-		Title:                 content.Title,
-		Description:           content.Description,
-		RightDescription:      content.DelegationDescription,
-		Homepage:              content.Homepage,
-		ContactPoints:         content.ContactPoints,
-		Keywords:              content.Keywords,
-		ResourceReferences:    references,
+		resourceContent:       contentFrom(content),
+		ResourceReferences:    scopeReferences(content.Scopes),
 		Delegable:             true,
 		Visible:               true,
 		ResourceType:          maskinportenSchemaType,
